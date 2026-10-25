@@ -18,6 +18,10 @@
 #                         --test-framework gut|gdunit when both are installed; --min-tests N (default 1). Unit tests
 #                         run through test_run.sh (skill godot-unit-tests) when a framework is installed under addons/;
 #                         with no known test directory the summary says SKIP, never PASS.
+#   --shot-dir RES        golden screenshots (skill godot-screenshot): every <name>.png + <name>.json there is re-shot
+#                         with shot.sh and compared. A golden from another driver/GPU is not compared (the frame is
+#                         still checked: drawn, right size, not blank, no engine error). No display (Linux without
+#                         xvfb-run): the summary says SKIP, never PASS.
 #   install only:  --dir D (project-relative, default tools/ci), --godot-version V (e.g. 4.7.2-stable; default:
 #                  read from the engine in GODOT_BIN / PATH)
 #
@@ -34,10 +38,11 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 PROJECT="" GATE="res://tools/ci/parse_gate.tscn" MIN_H=0 OUT="" DIR="tools/ci" GVER="" RPC=1 RUNARGS=() ARGS=()
-TESTARGS=() TESTDIRS=0
+TESTARGS=() TESTDIRS=0 SHOTDIR=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="${2%/}"; shift 2 ;;
+    --shot-dir) SHOTDIR="${2%/}"; SHOTDIR="${SHOTDIR#res://}"; shift 2 ;;
     --gate) GATE="$2"; shift 2 ;;
     --no-rpc-check) RPC=0; shift ;;
     --test-dir) TESTARGS+=(--dir "$2"); TESTDIRS=1; shift 2 ;;
@@ -66,10 +71,14 @@ RPCCHECK="$HERE/rpc_check.sh"
 # GUT / gdUnit4 runner (skill godot-unit-tests), same lookup.
 TESTRUN="$HERE/test_run.sh"
 [ -f "$TESTRUN" ] || TESTRUN="$HERE/../godot-unit-tests/test_run.sh"
+# Screenshot runner + its capture script (skill godot-screenshot), same lookup.
+SHOT="$HERE/shot.sh"
+[ -f "$SHOT" ] || SHOT="$HERE/../godot-screenshot/shot.sh"
 
 if [ "${ARGS[0]:-}" = install ]; then
   dest="$PROJECT/$DIR"
-  for f in "$dest/ci.sh" "$dest/godot_run.sh" "$dest/net_run.sh" "$dest/rpc_check.sh" "$dest/test_run.sh"; do
+  for f in "$dest/ci.sh" "$dest/godot_run.sh" "$dest/net_run.sh" "$dest/rpc_check.sh" "$dest/test_run.sh" \
+           "$dest/shot.sh" "$dest/shot_capture.gd"; do
     [ -e "$f" ] && { echo "install: $f already exists - not overwriting (delete it to update)"; exit 1; }
   done
   if [ -z "$GVER" ]; then
@@ -96,6 +105,10 @@ if [ "${ARGS[0]:-}" = install ]; then
   if [ -f "$NETRUN" ]; then cp "$NETRUN" "$dest/net_run.sh"; vendored="$vendored, res://$DIR/net_run.sh"; fi
   if [ -f "$RPCCHECK" ]; then cp "$RPCCHECK" "$dest/rpc_check.sh"; vendored="$vendored, res://$DIR/rpc_check.sh"; fi
   if [ -f "$TESTRUN" ]; then cp "$TESTRUN" "$dest/test_run.sh"; vendored="$vendored, res://$DIR/test_run.sh"; fi
+  if [ -f "$SHOT" ]; then
+    cp "$SHOT" "$dest/shot.sh"; cp "$(dirname "$SHOT")/shot_capture.gd" "$dest/shot_capture.gd"
+    vendored="$vendored, res://$DIR/shot.sh, res://$DIR/shot_capture.gd"
+  fi
   sed -e "s|__GODOT_VERSION__|$GVER|g" -e "s|__PROJECT__|$rel|g" -e "s|__CI__|$rel/$DIR/ci.sh|g" \
     "$HERE/templates/godot-ci.yml" > "$wf"
   echo "wrote $vendored and $wf (Godot $GVER, project dir '$rel')"
@@ -208,6 +221,42 @@ if [ -f "$PROJECT/addons/gut/gut_cmdln.gd" ] || [ -f "$PROJECT/addons/gdUnit4/bi
   fi
 fi
 
+# Golden screenshots: re-shoot each <name>.png that has a <name>.json (scene + size) next to it.
+SHOTS="none" ns=0 nsu=0
+if [ -n "$SHOTDIR" ]; then
+  if [ ! -f "$SHOT" ]; then
+    RESULTS+=("FAIL  shot  $SHOTDIR (shot.sh not found next to ci.sh or in ../godot-screenshot/)"); failed+=("shots"); n=$((n + 1))
+  else
+    goldens=()
+    for j in "$PROJECT/$SHOTDIR"/*.json; do [ -f "$j" ] && [ -f "${j%.json}.png" ] && goldens+=("$j"); done
+    if [ ${#goldens[@]} -eq 0 ]; then
+      RESULTS+=("FAIL  shot  res://$SHOTDIR has no <name>.png + <name>.json goldens"); failed+=("shots"); n=$((n + 1))
+    fi
+    for j in ${goldens[@]+"${goldens[@]}"}; do
+      g=$(basename "$j" .json)
+      scene=$(tr -d '\r' < "$j" | sed -n 's/^[[:space:]]*"scene":[[:space:]]*"\(.*\)",*$/\1/p')
+      size=$(tr -d '\r' < "$j" | sed -n 's/^[[:space:]]*"size":[[:space:]]*"\(.*\)",*$/\1/p')
+      n=$((n + 1))
+      echo "== shot $g ($scene at $size)"
+      bash "$SHOT" --path "$PROJECT" --scene "$scene" --size "$size" --golden "${j%.json}.png" \
+        --out "$OUT/shots/$g.png" ${IMPORT[@]+"${IMPORT[@]}"} > "$OUT/shot.out" 2>&1
+      rc=$?
+      IMPORT=(--no-import)
+      sed 's/^/   /' "$OUT/shot.out"
+      [ $rc -eq 3 ] && { echo "GODOT-CI: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; }
+      if [ $rc -eq 4 ]; then
+        RESULTS+=("SKIP  shot  ${#goldens[@]} golden(s) in res://$SHOTDIR (no display: install xvfb)"); SHOTS="SKIPPED"
+        n=$((n - 1)); break
+      fi
+      SHOTS="ran"
+      if [ $rc -eq 0 ]; then ns=$((ns + 1)); RESULTS+=("PASS  shot  $g")
+      elif [ $rc -eq 2 ]; then
+        ns=$((ns + 1)); nsu=$((nsu + 1)); RESULTS+=("PASS  shot  $g (frame ok; golden not compared: other renderer)")
+      else RESULTS+=("FAIL  shot  $g"); failed+=("shot:$g"); fi
+    done
+  fi
+fi
+
 echo "== summary (logs in $(show_path "$OUT"))"
 printf '   %s\n' "${RESULTS[@]}"
 nh=${#HARNESSES[@]}
@@ -219,5 +268,10 @@ fi
 if [ -n "$why" ]; then echo "GODOT-CI: FAIL ($why)"; exit 1; fi
 rpcnote="rpc check"; { [ -f "$RPCCHECK" ] && [ "$RPC" = 1 ]; } || rpcnote="rpc check SKIPPED"
 unitnote=""; [ "$UNIT" = ok ] && unitnote=", unit tests"; [ "$UNIT" = SKIPPED ] && unitnote=", unit tests SKIPPED"
-echo "GODOT-CI: PASS (parse gate, $rpcnote, $nh/$nh harnesses: $nd diag, $nn net$unitnote)"
+shotnote=""
+[ "$SHOTS" = SKIPPED ] && shotnote=", shots SKIPPED (no display)"
+if [ "$SHOTS" = ran ]; then
+  shotnote=", $ns shot(s)"; [ $nsu -gt 0 ] && shotnote="$shotnote ($nsu not compared: golden from another renderer)"
+fi
+echo "GODOT-CI: PASS (parse gate, $rpcnote, $nh/$nh harnesses: $nd diag, $nn net$unitnote$shotnote)"
 exit 0

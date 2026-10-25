@@ -480,4 +480,128 @@ else
     "$(diff "$WORK/ud12.files_before" "$WORK/ud12.files_after" | grep -c '^[<>]')"
 fi
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Screenshots. S1-S9 run tests/sabotage/shot_probe.gd as a --script on a demo copy (a naive capture: it reports what it
+# got, it judges nothing); the KIT cases run shot.sh and ci.sh --shot-dir. Anything that must draw needs a display:
+# Windows always has one (the window is parked off-screen), Linux only via xvfb-run - without it those cases say
+# SKIPPED, never PASS.
+SP="$WORK/shot"; rm -rf "$SP"; cp -r "$DEMO" "$SP"; rm -rf "$SP/.godot"; mkdir -p "$WORK/shots"
+godot --headless --path "$SP" --import > "$WORK/logs/s_import.log" 2>&1
+nat() { if command -v cygpath > /dev/null; then cygpath -m "$1"; else echo "$1"; fi; }
+PROBE=$(nat "$FIX/shot_probe.gd")
+sshow() {  # sshow <label> <exit> <log>
+  printf '\n=== %s\n    exit=%s\n' "$1" "$2"
+  grep -E '^probe: (image|done)|SCRIPT ERROR|^ERROR|crashed|Unable to create DisplayServer|Movie Maker' "$3" | tr -d '\r' \
+    | sed 's/^/    | /' | head -6
+  grep -q '^probe: done' "$3" || echo "    | (no 'probe: done' line)"
+}
+WIN_DISPLAY=0 XV=()
+case "$(uname -s)" in
+  Linux) if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xvfb-run > /dev/null; then
+           XV=(xvfb-run -a -s "-screen 0 1280x720x24"); fi ;;
+  *) WIN_DISPLAY=1 ;;
+esac
+POS=(); [ "$WIN_DISPLAY" = 1 ] && POS=(--position -10000,-10000)
+GL=(); [ ${#XV[@]} -gt 0 ] && GL=(--rendering-driver opengl3)   # Vulkan on llvmpipe crashes, see S7
+can_draw() { [ "$WIN_DISPLAY" = 1 ] || [ ${#XV[@]} -gt 0 ]; }
+win() { ${XV[@]+"${XV[@]}"} "$GODOT_BIN" --path "$SP" ${POS[@]+"${POS[@]}"} "$@"; }   # a run that draws
+
+s=$(date +%s%N)
+godot --headless --path "$SP" --quit-after 600 --script "$PROBE" ++ --scene=res://src/main.tscn > "$WORK/logs/s1.log" 2>&1
+e=$?; sshow "S1 --headless capture that awaits frame_post_draw (--quit-after 600)" $e "$WORK/logs/s1.log"
+echo "    wall=$(( ($(date +%s%N) - s) / 1000000 ))ms"
+godot --headless --path "$SP" --quit-after 600 --script "$PROBE" ++ --no-post-draw > "$WORK/logs/s2.log" 2>&1
+sshow "S2 --headless capture without the await" $? "$WORK/logs/s2.log"
+godot --headless --path "$SP" --write-movie "$(nat "$WORK/shots/s3.png")" --fixed-fps 10 --quit-after 5 res://src/main.tscn \
+  > "$WORK/logs/s3.log" 2>&1
+sshow "S3 --headless --write-movie" $? "$WORK/logs/s3.log"
+if [ "$(uname -s)" = Linux ]; then
+  env -u DISPLAY -u WAYLAND_DISPLAY "$GODOT_BIN" --path "$SP" --quit-after 600 --script "$PROBE" > "$WORK/logs/s8.log" 2>&1
+  sshow "S8 (Linux) no display, no --headless" $? "$WORK/logs/s8.log"
+fi
+if can_draw; then
+  for f in 0 1; do   # grabbed before anything is drawn: at startup (frame 0) and with the scene in (frame 1)
+    win ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --frames=$f --no-post-draw > "$WORK/logs/s4_$f.log" 2>&1
+    sshow "S4 drawing run, image grabbed after $f frame(s) without waiting for the draw" $? "$WORK/logs/s4_$f.log"
+  done
+  win ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --scene=res://src/enemy.tscn > "$WORK/logs/s5.log" 2>&1
+  sshow "S5 drawing run, a 3D scene without a camera (enemy.tscn)" $? "$WORK/logs/s5.log"
+  for i in 1 2; do
+    win ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --out="$(nat "$WORK/shots/s6_$i.png")" > "$WORK/logs/s6_$i.log" 2>&1
+  done
+  printf '\n=== S6 main.tscn twice, same driver\n    %s\n' \
+    "$(cmp -s "$WORK/shots/s6_1.png" "$WORK/shots/s6_2.png" && echo "PNGs BYTE-IDENTICAL" || echo "PNGs differ")"
+  if [ "$WIN_DISPLAY" = 1 ]; then
+    win --rendering-driver opengl3 --quit-after 600 --script "$PROBE" ++ --out="$(nat "$WORK/shots/s6_gl.png")" > "$WORK/logs/s6_gl.log" 2>&1
+    printf '    default driver vs opengl3: %s\n' \
+      "$(cmp -s "$WORK/shots/s6_1.png" "$WORK/shots/s6_gl.png" && echo "BYTE-IDENTICAL" || echo "PNGs differ")"
+  fi
+  if [ ${#XV[@]} -gt 0 ]; then
+    win --quit-after 600 --script "$PROBE" > "$WORK/logs/s7.log" 2>&1
+    sshow "S7 (Linux, xvfb) default Vulkan on llvmpipe" $? "$WORK/logs/s7.log"
+  fi
+  cp "$SP/src/main.gd" "$WORK/main.gd.orig"; cp "$FIX/syntax_error.gd" "$SP/src/main.gd"
+  win ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --out="$(nat "$WORK/shots/s9.png")" > "$WORK/logs/s9.log" 2>&1
+  sshow "S9 drawing run, main.gd does not parse" $? "$WORK/logs/s9.log"
+  cp "$WORK/main.gd.orig" "$SP/src/main.gd"
+else
+  printf '\n=== S4-S7, S9: SKIPPED (no display and no xvfb-run)\n'
+fi
+
+SHOT="$ROOT/skills/godot-screenshot/shot.sh"; CIS="$WORK/logs/ci_shot.out"
+shcase() {  # shcase <label> [shot.sh args]
+  local label="$1"; shift
+  GODOT_BIN="$GODOT_BIN" bash "$SHOT" --path "$SP" --no-import "$@" > "$WORK/logs/shot.out" 2>&1
+  printf '\n=== KIT shot.sh: %s\n    exit=%s\n' "$label" $?
+  grep -E '^  golden: rmse|^GODOT-SHOT' "$WORK/logs/shot.out" | sed "s|$(nat "$WORK")|<work>|g; s/^ */    | /"
+}
+if can_draw; then
+  shcase "main.tscn (expect PASS)" --out "$WORK/shots/k_main.png"
+  shcase "enemy.tscn, no camera (expect FAIL: blank frame)" --scene res://src/enemy.tscn --out "$WORK/shots/k_enemy.png"
+  shcase "write a golden (expect PASS, .gdignore written)" --out "$WORK/shots/k_g.png" --golden "$SP/tests/shots/main.png" --update-golden
+  printf '    (.gdignore next to the golden: %s)\n' "$([ -e "$SP/tests/shots/.gdignore" ] && echo yes || echo NO)"
+  shcase "same scene vs that golden (expect PASS, rmse 0.000)" --out "$WORK/shots/k_same.png" --golden "$SP/tests/shots/main.png"
+  cp "$SP/tests/shots/main.png" "$WORK/golden.before.png"
+  shcase "--out and --golden the same file (expect FAIL, golden untouched)" --out "$SP/tests/shots/main.png" --golden "$SP/tests/shots/main.png"
+  printf '    (golden unchanged: %s)\n' "$(cmp -s "$WORK/golden.before.png" "$SP/tests/shots/main.png" && echo yes || echo NO)"
+  shcase "same golden at another --size (expect FAIL)" --out "$WORK/shots/k_size.png" --golden "$SP/tests/shots/main.png" --size 640x360
+  if [ "$WIN_DISPLAY" = 1 ]; then
+    shcase "golden from the default driver, run with opengl3 (expect UNVERIFIED)" --out "$WORK/shots/k_gl.png" \
+      --golden "$SP/tests/shots/main.png" --driver opengl3
+  fi
+  cp "$SP/src/main.tscn" "$WORK/main.tscn.orig"
+  sed -i 's/text = "score: 0"/text = "score: 8"/' "$SP/src/main.tscn"
+  shcase "HUD text score: 0 -> 8 (expect FAIL, rmse ~1.4)" --out "$WORK/shots/k_8.png" --golden "$SP/tests/shots/main.png"
+  cp "$WORK/main.tscn.orig" "$SP/src/main.tscn"
+  sed -i 's/offset_left = 16.0/offset_left = 5000.0/' "$SP/src/main.tscn"
+  shcase "HUD label moved off-screen (expect FAIL, rmse ~4.4)" --out "$WORK/shots/k_off.png" --golden "$SP/tests/shots/main.png"
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots > "$CIS" 2>&1
+  printf '\n=== KIT ci.sh --shot-dir, label still off-screen (expect FAIL: shot:main)\n    exit=%s\n' $?
+  grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+  cp "$WORK/main.tscn.orig" "$SP/src/main.tscn"
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots > "$CIS" 2>&1
+  printf '\n=== KIT ci.sh --shot-dir, restored (expect PASS, 1 shot)\n    exit=%s\n' $?
+  grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+else
+  printf '\n=== KIT shot.sh drawing cases: SKIPPED (no display and no xvfb-run)\n'
+fi
+if [ "$(uname -s)" = Linux ]; then
+  # No display and no xvfb-run: a PATH with every system tool except xvfb-run and Xvfb.
+  NOX="$WORK/nopath"; rm -rf "$NOX"; mkdir -p "$NOX"
+  for p in /usr/bin/* /bin/*; do
+    case "${p##*/}" in xvfb-run|Xvfb) ;; *) [ -e "$NOX/${p##*/}" ] || ln -s "$p" "$NOX/${p##*/}" ;; esac
+  done
+  mkdir -p "$SP/tests/shots"
+  env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$SHOT" --path "$SP" --no-import \
+    --out "$WORK/shots/k_nd.png" > "$WORK/logs/shot.out" 2>&1
+  printf '\n=== KIT shot.sh (Linux) without display and xvfb-run (expect NO-DISPLAY, exit 4)\n    exit=%s\n' $?
+  tail -1 "$WORK/logs/shot.out" | sed 's/^/    | /'
+  if [ -f "$SP/tests/shots/main.json" ]; then
+    env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots \
+      > "$CIS" 2>&1
+    printf '\n=== KIT ci.sh --shot-dir (Linux) without display and xvfb-run (expect PASS with shots SKIPPED)\n    exit=%s\n' $?
+    grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+  fi
+fi
+
 echo; echo "logs: $WORK/logs"

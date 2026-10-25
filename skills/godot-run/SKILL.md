@@ -70,6 +70,10 @@ each process with `--no-import`. Parallel imports would write the same `.godot/`
 delete it afterwards. Without it, the isolation directory is thrown away after the run. `godot-unit-tests` uses it to
 collect gdUnit4's reports.
 
+**Anything that must draw** (screenshots): `--windowed` drops `--headless` from the scene run; the import stays
+headless. `--headless` never draws a frame. A windowed run needs a display; on Linux, run it under `xvfb-run`. The
+`godot-screenshot` skill's `shot.sh` does all of this.
+
 The runner prints the log path. Read the log whenever the verdict is not PASS. Pass `--allow-engine-errors` only when
 the project has known, unrelated `ERROR:` noise, and say so when you report.
 

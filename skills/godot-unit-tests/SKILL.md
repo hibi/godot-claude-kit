@@ -16,7 +16,7 @@ Both popular Godot test frameworks can exit **0** without having tested anything
 | GUT: a fresh clone run before `--import` | **0** | `ERROR: Some GUT class_names have not been imported`, no test ran |
 | gdUnit4: the test directory does not exist or is empty | **0** | `No test cases found, abort test run!` |
 | gdUnit4 started with `-d` and a test file that does not parse (Windows) | — | **hangs forever** at a `debug>` prompt |
-| the same on Linux | **0** | `Abnormal exit with 105`, yet the process exits 0 |
+| the same on Linux | **0**, or a hang | `Abnormal exit with 105`, yet the process exits 0 (3 of 4 measured runs); the 4th hung at `debug>` |
 | gdUnit4 headless without `--ignoreHeadlessMode` | 103 | `Headless mode is not supported!` |
 
 Where the frameworks do report a failure, the exit code is right:

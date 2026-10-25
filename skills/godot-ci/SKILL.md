@@ -19,6 +19,10 @@ exit code, never the exit code alone):
    installed under `addons/` and the test directory is known: `--test-dir res://...`, or `"dirs"` in GUT's
    `.gutconfig.json`. A framework without a known directory shows a visible `SKIP` row, and the PASS line says
    `unit tests SKIPPED`.
+6. The **golden screenshots**, when you pass `--shot-dir res://tests/shots`: every `<name>.png` with a `<name>.json`
+   next to it is shot again through `shot.sh` and compared (skill `godot-screenshot`). Shots need a display. Without
+   one (Linux with no `xvfb-run`) there is a visible `SKIP` row and the PASS line says `shots SKIPPED (no display)`.
+   A golden made by another driver or GPU is not compared; the row says so, but the frame checks still run.
 
 Harness discovery skips `.godot/`, `addons/` and directories with a `.gdignore`. Every run after the first reuses its
 import.
@@ -45,6 +49,7 @@ Other options:
 - `--out <dir>`: where the per-run logs go. A fresh temp dir by default; the path is printed either way.
 - `--test-dir res://...` (repeatable), `--test-framework gut|gdunit` (when both are installed) and `--min-tests N`
   (default 1) go to the unit-test run.
+- `--shot-dir res://...`: the directory of golden screenshots, written by `shot.sh --update-golden`.
 - `--no-rpc-check`: skips the static RPC check. Use it only for a project the check misreads (it matches by name),
   and say so when you report. The multiplayer harnesses still run.
 

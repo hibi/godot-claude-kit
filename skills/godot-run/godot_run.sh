@@ -17,6 +17,8 @@
 #   --log FILE             where to keep the run log (default: a fresh temp dir; the path is printed either way).
 #   --home DIR             use DIR as the isolated APPDATA/HOME and KEEP it (default: a throwaway dir, deleted after
 #                          the run) - for a caller that needs what the run wrote to user://, e.g. test reports.
+#   --windowed             run the scene WITHOUT --headless (the import stays headless): for anything that must render,
+#                          e.g. screenshots. --headless never draws a frame. Needs a display (on Linux: xvfb-run).
 #
 # Engine binary: $GODOT_BIN, else `godot` on PATH. Nothing is hard-coded.
 #
@@ -29,6 +31,7 @@
 set -u
 
 PROJECT="" BANNER="" FRAMES=3600 TIMEOUT_S=600 DO_IMPORT=1 IMPORT_ONLY=0 ALLOW_ERRORS=0 LOG="" KEEP_HOME=""
+HEADLESS=--headless
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="$2"; shift 2 ;;
@@ -40,6 +43,7 @@ while [ $# -gt 0 ]; do
     --allow-engine-errors) ALLOW_ERRORS=1; shift ;;
     --log) LOG="$2"; shift 2 ;;
     --home) KEEP_HOME="$2"; shift 2 ;;
+    --windowed) HEADLESS=""; shift ;;
     --) shift; break ;;
     *) break ;;
   esac
@@ -90,7 +94,7 @@ if [ "$IMPORT_ONLY" = 1 ]; then
   echo "GODOT-RUN: IMPORTED"; exit 0
 fi
 
-engine "$LOG" --headless --path "$PROJECT" --quit-after "$FRAMES" "$@"
+engine "$LOG" ${HEADLESS:+"$HEADLESS"} --path "$PROJECT" --quit-after "$FRAMES" "$@"
 code=$?
 drop_home
 
