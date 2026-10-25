@@ -3,6 +3,12 @@
 **Claude Code skills that make Claude actually run, test and verify a Godot 4 project, instead of trusting an exit
 code.**
 
+![Claude runs a real headless server and client, catches a broken server-side hit check and names the line](docs/demo.gif)
+
+*A real Claude Code session, replayed and condensed. The validation in the demo's `net_match.gd` was broken on
+purpose, and the prompt did not mention the kit. Claude picked the multiplayer skill on its own. It ran a real server
+and a real client, got `FAIL` from both sides, and found the line.*
+
 When an AI agent "verifies" a Godot change, it usually runs the engine headless, sees exit code 0 and reports success.
 In Godot 4 that proves nothing. Every row below exits **0**:
 
