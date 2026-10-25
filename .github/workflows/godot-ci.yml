@@ -27,15 +27,20 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb libgl1-mesa-dri libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libfontconfig1
 
-      - name: Import, parse gate, harnesses
-        run: bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --out "$RUNNER_TEMP/godot-ci-logs"
-
-      # One-off (step 1 of 2): render the demo's golden screenshot ON this runner, so its fingerprint (driver, Mesa
-      # version) matches later runs. It lands in the godot-ci-logs artifact; step 2 commits it and turns on the compare.
-      - name: Golden screenshot for the demo (one-off)
+      # demo/tests/shots/main.png was rendered on this runner image (llvmpipe, see main.json). --require-shots: if a
+      # runner update changes the Mesa version, the compare cannot happen and the job goes red instead of letting the
+      # check go quiet. The next step then leaves a fresh golden for this runner in the logs artifact (candidate/):
+      # look at it, and if it is right, commit it over demo/tests/shots/.
+      - name: Import, parse gate, harnesses, screenshots
         run: |
-          bash "skills/godot-screenshot/shot.sh" --path "demo" --out "$RUNNER_TEMP/godot-ci-logs/shots/main.png" \
-            --golden "$RUNNER_TEMP/godot-ci-logs/golden/main.png" --update-golden
+          bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --shot-dir res://tests/shots --require-shots \
+            --out "$RUNNER_TEMP/godot-ci-logs"
+
+      - name: Candidate golden for this runner (only when the job failed)
+        if: failure()
+        run: |
+          bash "skills/godot-screenshot/shot.sh" --path "demo" --out "$RUNNER_TEMP/godot-ci-logs/candidate/shot.png" \
+            --golden "$RUNNER_TEMP/godot-ci-logs/candidate/main.png" --update-golden
 
       - name: Keep the logs
         if: always()

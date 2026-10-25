@@ -88,7 +88,9 @@ if [ -n "$GOLDEN" ]; then
   fi
 fi
 
-WRAP=() ENGINE_ARGS=(--resolution "$SIZE")
+# --audio-driver Dummy: a screenshot needs no sound, and a CI runner with ALSA but no sound card logs
+# `ERROR: ... ERR_CANT_OPEN` (init_output_device) on every drawing run - a good frame would FAIL on it. Measured.
+WRAP=() ENGINE_ARGS=(--resolution "$SIZE" --audio-driver Dummy)
 if [ "$(uname -s)" = Linux ]; then
   if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     if command -v xvfb-run >/dev/null 2>&1; then
@@ -119,6 +121,7 @@ ${WRAP[@]+"${WRAP[@]}"} bash "$RUNNER" --path "$PROJECT" --windowed --banner '^S
   --log "$LOG" ${RUNARGS[@]+"${RUNARGS[@]}"} -- "${ENGINE_ARGS[@]}" --script "$(native "$HERE/shot_capture.gd")" \
   ++ "${USER_ARGS[@]}" > "$WORK/runner.out" 2>&1
 rc=$?
+cp "$LOG" "${OUT%.*}.log" 2>/dev/null  # the run log next to the PNG: a CI artifact then carries both
 cat "$WORK/runner.out"
 [ $rc -eq 3 ] && { echo "GODOT-SHOT: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; }
 CLEAN=$(tr -d '\r' < "$LOG" 2>/dev/null)

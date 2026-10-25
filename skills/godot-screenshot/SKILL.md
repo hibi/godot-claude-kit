@@ -19,6 +19,7 @@ Debian under xvfb with Mesa llvmpipe) by the kit's `tests/measure_traps.sh`:
 | the scene's script does not parse | **0** | a plausible PNG (the HUD is there, the spawned enemies are not); only a `SCRIPT ERROR` line tells |
 | Linux under xvfb, default Vulkan on llvmpipe | crash | signal 11; `--rendering-driver opengl3` works |
 | Linux, no display and no `--headless` | 1 | `Unable to create DisplayServer, all display drivers failed` |
+| a drawing run on a machine with ALSA but no sound card (a CI runner) | **0** | one `ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN` from the audio driver: a judge that fails on ERROR lines fails a good frame. `shot.sh` passes `--audio-driver Dummy` |
 
 Rendering facts that the golden comparison relies on:
 
@@ -55,7 +56,7 @@ What `shot.sh` does:
 | Last line | Exit | Meaning |
 |---|---|---|
 | `GODOT-SHOT: PASS <png>` | 0 | frame drawn, right size, not blank, clean log; golden matched if one was given |
-| `GODOT-SHOT: FAIL (why)` | 1 | the first failure; the PNG is still written when there was an image, so you can look at it |
+| `GODOT-SHOT: FAIL (why)` | 1 | the first failure; the PNG is still written when there was an image, so you can look at it, and the run log lands next to it (`<out>.log`) |
 | `GODOT-SHOT: UNVERIFIED (...)` | 2 | the frame passed, but the golden came from another driver/GPU/engine and was **not** compared |
 | `GODOT-SHOT: NO-ENGINE` | 3 | no binary: see the `godot-run` skill |
 | `GODOT-SHOT: NO-DISPLAY` | 4 | Linux without a display or `xvfb-run` (`apt install xvfb`): nothing can be drawn here |
@@ -124,9 +125,14 @@ to it, and compares it with the golden.
 - With no display, the summary says `SKIP shot ... (no display)`, never PASS.
 - A golden made on your GPU is not compared on a CI runner's software renderer (`UNVERIFIED`). The frame checks still
   run there: drawn, right size, not blank, no engine error.
-- Not yet measured on GitHub's own runner. Whether `ubuntu-latest` has `xvfb-run` and the X libraries Godot needs is
-  unverified. On Debian it needed `xvfb`, `libgl1-mesa-dri`, `libxcursor1`, `libxinerama1`, `libxrandr2`, `libxi6` and
-  `libxkbcommon0`.
+- `--require-shots` turns both of these into a FAIL. Use it when the goldens were made on the CI machine itself, so a
+  missing display or a changed renderer cannot quietly switch the compare off.
+- Measured on GitHub's `ubuntu-latest` with the kit's own workflow. After
+  `apt-get install xvfb libgl1-mesa-dri libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libfontconfig1`,
+  the frame rendered with OpenGL on llvmpipe (Mesa 25.2.8).
+- That runner has ALSA but no sound card, which is where the audio `ERROR` in the table above was found.
+- The kit keeps its golden, rendered on that runner, in `demo/tests/shots/` and runs `ci.sh` with `--require-shots`.
+  When the job fails, a final step leaves a fresh candidate golden in the logs artifact.
 
 ## 6. Reporting
 

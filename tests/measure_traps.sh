@@ -504,7 +504,8 @@ esac
 POS=(); [ "$WIN_DISPLAY" = 1 ] && POS=(--position -10000,-10000)
 GL=(); [ ${#XV[@]} -gt 0 ] && GL=(--rendering-driver opengl3)   # Vulkan on llvmpipe crashes, see S7
 can_draw() { [ "$WIN_DISPLAY" = 1 ] || [ ${#XV[@]} -gt 0 ]; }
-win() { ${XV[@]+"${XV[@]}"} "$GODOT_BIN" --path "$SP" ${POS[@]+"${POS[@]}"} "$@"; }   # a run that draws
+# --audio-driver Dummy: with ALSA but no sound card every drawing run logs an audio ERROR (S10) - noise here.
+win() { ${XV[@]+"${XV[@]}"} "$GODOT_BIN" --path "$SP" ${POS[@]+"${POS[@]}"} --audio-driver Dummy "$@"; }   # a run that draws
 
 s=$(date +%s%N)
 godot --headless --path "$SP" --quit-after 600 --script "$PROBE" ++ --scene=res://src/main.tscn > "$WORK/logs/s1.log" 2>&1
@@ -544,6 +545,17 @@ if can_draw; then
   win ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --out="$(nat "$WORK/shots/s9.png")" > "$WORK/logs/s9.log" 2>&1
   sshow "S9 drawing run, main.gd does not parse" $? "$WORK/logs/s9.log"
   cp "$WORK/main.gd.orig" "$SP/src/main.gd"
+  # S10 - the audio driver of a drawing run (headless uses a dummy one). On a machine with ALSA but no sound card
+  # (a CI runner; here: Debian with libasound2t64 and no card) the default driver logs an ERROR on every run.
+  for ad in default Dummy; do
+    adarg=(); [ "$ad" = Dummy ] && adarg=(--audio-driver Dummy)
+    ${XV[@]+"${XV[@]}"} "$GODOT_BIN" --path "$SP" ${POS[@]+"${POS[@]}"} ${GL[@]+"${GL[@]}"} ${adarg[@]+"${adarg[@]}"} \
+      --quit-after 60 res://src/main.tscn > "$WORK/logs/s10_$ad.log" 2>&1
+    rc=$?
+    printf '\n=== S10 drawing run of main.tscn, audio driver %s\n    exit=%s, ERROR lines: %s\n' "$ad" $rc \
+      "$(grep -c '^ERROR' "$WORK/logs/s10_$ad.log")"
+    grep -A1 '^ERROR' "$WORK/logs/s10_$ad.log" | tr -d '\r' | sed 's/^/    | /' | head -2
+  done
 else
   printf '\n=== S4-S7, S9: SKIPPED (no display and no xvfb-run)\n'
 fi
