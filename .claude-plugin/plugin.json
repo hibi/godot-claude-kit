@@ -1,10 +1,13 @@
 {
   "name": "godot-kit",
   "version": "0.1.0",
-  "description": "Skills and agents that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
+  "description": "Skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
   "author": {
-    "name": "godot-claude-kit"
+    "name": "Jakub Hübner",
+    "url": "https://github.com/hibi"
   },
+  "homepage": "https://github.com/hibi/godot-claude-kit",
+  "repository": "https://github.com/hibi/godot-claude-kit",
   "license": "MIT",
-  "keywords": ["godot", "godot4", "gdscript", "gamedev", "testing", "headless"]
+  "keywords": ["godot", "godot4", "gdscript", "gamedev", "testing", "headless", "ci"]
 }

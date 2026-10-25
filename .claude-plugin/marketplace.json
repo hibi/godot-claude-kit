@@ -1,7 +1,8 @@
 {
   "name": "godot-claude-kit",
   "owner": {
-    "name": "godot-claude-kit"
+    "name": "Jakub Hübner",
+    "url": "https://github.com/hibi"
   },
   "metadata": {
     "description": "Claude Code plugins for Godot 4 developers."
@@ -10,7 +11,7 @@
     {
       "name": "godot-kit",
       "source": "./",
-      "description": "Skills and agents that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
+      "description": "Skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
       "category": "development"
     }
   ]

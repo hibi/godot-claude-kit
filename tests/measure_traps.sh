@@ -204,4 +204,35 @@ kit_run "gate with broken scripts only in addons/ and a .gdignore dir (expect PA
 cp "$FIX/syntax_error.gd" "$K/src/broken/bad.gd"
 kit_run "gate with a broken script in src/ (expect FAIL)" res://tools/ci/parse_gate.tscn kit_broken.log
 
+# Kit: godot-ci on fresh demo copies (no .godot/), one sabotage at a time. A verdict that ignores a failed run once
+# slipped through here (rc read after another command), so every direction is checked on every measurement.
+CI="$ROOT/skills/godot-ci/ci.sh"; C="$WORK/ci"
+ci_case() {  # ci_case <label> <setup command, run inside the copy> [ci.sh args...]
+  local label="$1" setup="$2"; shift 2
+  rm -rf "$C"; cp -r "$DEMO" "$C"; rm -rf "$C/.godot"
+  (cd "$C" && eval "$setup")
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$C" --out "$WORK/logs/ci_$(printf '%s' "$label" | tr -c 'a-z0-9' _)" "$@" \
+    > "$WORK/logs/ci.out" 2>&1
+  printf '\n=== KIT ci.sh: %s\n    exit=%s\n' "$label" $?
+  grep -E '^   (PASS|FAIL)  |^GODOT-CI' "$WORK/logs/ci.out" | sed 's/^ */    | /'
+}
+ci_case "clean demo (expect PASS)" ":"
+ci_case "syntax error in src/ (expect FAIL: gate)" "cp '$FIX/syntax_error.gd' src/_sabotage.gd"
+ci_case "Health clamp removed (expect FAIL: diag_health)" "cp '$FIX/health_no_clamp.gd' src/health.gd"
+ci_case "gate scene missing (expect FAIL: gate; diag_health still PASS)" "rm tools/ci/parse_gate.tscn"
+ci_case "--min-harnesses 2 with one harness (expect FAIL)" ":" --min-harnesses 2
+
+# Kit: `ci.sh install` into a git repo whose Godot project sits in game/. The workflow must point at game/ (a path
+# comparison once produced a bogus absolute-ish path on Git Bash, where /tmp and %TEMP% are one directory), and the
+# vendored copy must pass on its own.
+if command -v git > /dev/null; then
+  G="$WORK/ci_repo"; rm -rf "$G"; mkdir -p "$G"; cp -r "$DEMO" "$G/game"; rm -rf "$G/game/.godot"; git -C "$G" init -q
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$G/game" install > "$WORK/logs/ci_install.out" 2>&1
+  printf '\n=== KIT ci.sh install, project in game/ of a git repo (expect --path "game", vendored copy PASS)\n    exit=%s\n' $?
+  grep -E 'run: bash' "$G/.github/workflows/godot-ci.yml" | sed 's/^ */    | /'
+  (cd "$G" && GODOT_BIN="$GODOT_BIN" bash game/tools/ci/ci.sh --path game 2>&1 | tail -1 | sed 's/^/    | /')
+else
+  printf '\n=== KIT ci.sh install: SKIPPED (no git on this machine)\n'
+fi
+
 echo; echo "logs: $WORK/logs"

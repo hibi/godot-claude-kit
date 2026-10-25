@@ -1,0 +1,34 @@
+# The kit tests itself: the same ci.sh users get, run on the demo project (generated from skills/godot-ci/templates).
+name: godot-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  godot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GODOT_VERSION: 4.7.2-stable
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download Godot ${{ env.GODOT_VERSION }}
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/godot.zip" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64"
+          echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Import, parse gate, harnesses
+        run: bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 1 --out "$RUNNER_TEMP/godot-ci-logs"
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: godot-ci-logs
+          path: ${{ runner.temp }}/godot-ci-logs
+          if-no-files-found: ignore
