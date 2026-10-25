@@ -81,8 +81,10 @@ Every rule below exists because breaking it produced a green run that was wrong:
 6. **Assert the value, not that "something happened".** `hp == 0`, not `hp != 100`. `score == bounty`, not
    `score > 0`. Put the actual values into `<why>`, e.g. `(hp=-30)`, so a FAIL explains itself.
 7. **Reset shared state you read.** Autoloads keep their state between checks in one run.
-8. **Let the frame settle.** After `queue_free()` or a signal fan-out, `await get_tree().process_frame` before you
-   assert.
+8. **Let the frame settle.** After a signal fan-out, `await get_tree().process_frame` before you assert. After
+   `queue_free()`, one frame is not always enough: the demo's check passed locally and failed once on a GitHub
+   runner with `alive=true`. Poll instead, with a bound:
+   `for i in 10: if not is_instance_valid(e): break; await get_tree().process_frame` (one statement per line).
 
 A harness whose own script does not parse leaves the scene running as a bare node. That run exits 0, prints a
 `SCRIPT ERROR` and no banner. The runner catches it through the error token and the missing banner. Exit code alone

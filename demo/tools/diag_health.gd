@@ -63,7 +63,11 @@ func _check_kill_pays_bounty() -> void:
 	add_child(e)
 	var bounty: int = e.bounty
 	e.get_node("Health").damage(9999)
-	# queue_free and signal fan-out settle on the next frame.
-	await get_tree().process_frame
+	# queue_free lands at the end of a frame, but not always the next one: a single process_frame passed locally
+	# and failed once on a CI runner (alive=true). Poll, with a bound.
+	for i in 10:
+		if not is_instance_valid(e):
+			break
+		await get_tree().process_frame
 	_check("kill pays the bounty once", GameState.score == bounty and not is_instance_valid(e),
 		"score=%d bounty=%d alive=%s" % [GameState.score, bounty, is_instance_valid(e)])

@@ -46,7 +46,7 @@ func _check_placeholder() -> void:
 	#   add_child(e)                              # the real scene, so _ready and @onready run
 	#   var bounty: int = e.bounty                # read it now: e is freed by the time you assert
 	#   e.get_node("Health").damage(9999)
-	#   await get_tree().process_frame            # queue_free and signal fan-out settle on the next frame
+	#   await get_tree().process_frame            # signal fan-out settles here; a freed node: poll (SKILL.md rule 8)
 	#   _check("kill pays the bounty", GameState.score == bounty, "score=%d bounty=%d" % [GameState.score, bounty])
 	await get_tree().process_frame
 	_check("placeholder replaced by real checks", false, "fresh template - write the real checks first")
