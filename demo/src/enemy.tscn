@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/enemy.gd" id="1"]
+[ext_resource type="Script" path="res://src/health.gd" id="2"]
+
+[node name="Enemy" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("2")
+max_hp = 30

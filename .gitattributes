@@ -1,0 +1,3 @@
+# LF everywhere: the bash scripts break on CRLF (Git for Windows defaults to core.autocrlf=true).
+* text=auto eol=lf
+*.png binary

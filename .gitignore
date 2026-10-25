@@ -1,0 +1,4 @@
+demo/.godot/
+*.tmp
+# Local dev notes: contain the hygiene grep pattern (the author's other project names). Never publish.
+CLAUDE.md

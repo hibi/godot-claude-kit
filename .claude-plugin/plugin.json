@@ -1,0 +1,10 @@
+{
+  "name": "godot-kit",
+  "version": "0.1.0",
+  "description": "Skills and agents that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
+  "author": {
+    "name": "godot-claude-kit"
+  },
+  "license": "MIT",
+  "keywords": ["godot", "godot4", "gdscript", "gamedev", "testing", "headless"]
+}

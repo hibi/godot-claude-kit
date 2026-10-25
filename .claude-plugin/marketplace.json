@@ -1,0 +1,17 @@
+{
+  "name": "godot-claude-kit",
+  "owner": {
+    "name": "godot-claude-kit"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for Godot 4 developers."
+  },
+  "plugins": [
+    {
+      "name": "godot-kit",
+      "source": "./",
+      "description": "Skills and agents that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
+      "category": "development"
+    }
+  ]
+}
