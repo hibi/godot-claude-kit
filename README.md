@@ -1,7 +1,31 @@
 # godot-claude-kit
 
 **Claude Code skills that make Claude actually run, test and verify a Godot 4 project, instead of trusting an exit
-code.**
+code. They give an agent loop verdicts it can safely stop on.**
+
+## Built for agent loops
+
+An agent running in a loop decides when it is done from what its tools tell it. The loop can be `/loop`, `claude -p`
+in a script, or a "keep going until it's green" setup. A Godot run that exits 0 without having tested anything is the
+worst signal such a loop can get: the loop stops, and the result is wrong. Every script in this kit is built to be a
+stop condition you can trust:
+
+- **One last line, one exit code.** Every script ends with a line like `GODOT-RUN: PASS`, `GODOT-CI: FAIL (...)`,
+  `GODOT-SHOT: UNVERIFIED (...)` or `REVIEW: clean`, and a documented exit code. A loop can branch on either, without
+  guessing.
+- **Nothing passes by default.** A run that proves nothing says `UNVERIFIED`. A check that could not run says `SKIP`,
+  `FAIL` or `incomplete`. None of them ever says PASS.
+- **Nothing hangs the loop.**
+  - Every engine run has a frame backstop (`--quit-after`) and a wall-clock timeout (coreutils `timeout`, which Git
+    Bash and Linux have).
+  - Measured: a scene that never loads stops after its frame count, and `timeout` killed a run that would have taken
+    about 2 hours, leaving no engine process behind.
+  - The one engine mode measured to hang forever (`--debug` on a script that does not parse) is never started on a
+    project whose parse gate fails.
+- **A failure says what to fix.** It names the broken script, the failing check with its values, or the
+  `res://file.gd:LINE` of a warning. The next iteration has something to act on.
+- **Tested the way a loop runs it.** Fresh `claude -p` sessions, with only the plugin loaded and a plain prompt that
+  never names the kit, picked the right skill or agent and returned the right verdict.
 
 ![Claude runs a real headless server and client, catches a broken server-side hit check and names the line](docs/demo.gif)
 

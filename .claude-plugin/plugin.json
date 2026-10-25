@@ -1,7 +1,7 @@
 {
   "name": "godot-kit",
   "version": "0.3.2",
-  "description": "Skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
+  "description": "Verdicts an agent loop can trust: skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
   "author": {
     "name": "Jakub Hübner",
     "url": "https://github.com/hibi"
@@ -9,5 +9,5 @@
   "homepage": "https://github.com/hibi/godot-claude-kit",
   "repository": "https://github.com/hibi/godot-claude-kit",
   "license": "MIT",
-  "keywords": ["godot", "godot4", "gdscript", "gamedev", "testing", "headless", "ci", "multiplayer", "enet", "rpc", "gut", "gdunit4", "unit-testing", "screenshot", "visual-regression"]
+  "keywords": ["godot", "godot4", "gdscript", "gamedev", "testing", "headless", "ci", "multiplayer", "enet", "rpc", "gut", "gdunit4", "unit-testing", "screenshot", "visual-regression", "agent-loop", "autonomous-agents", "code-review"]
 }

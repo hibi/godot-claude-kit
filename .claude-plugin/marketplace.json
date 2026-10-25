@@ -11,7 +11,7 @@
     {
       "name": "godot-kit",
       "source": "./",
-      "description": "Skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
+      "description": "Verdicts an agent loop can trust: skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
       "category": "development"
     }
   ]
