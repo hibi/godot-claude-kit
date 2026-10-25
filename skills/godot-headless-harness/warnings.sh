@@ -4,7 +4,8 @@
 #
 #   bash warnings.sh --path <project> [options] [file.gd ...]     files: only report these (res://, relative or absolute)
 #
-#   --gate RES      the parse gate scene (default res://tools/ci/parse_gate.tscn; scaffold.sh gate writes it)
+#   --gate RES      the project's parse gate scene (default res://tools/ci/parse_gate.tscn). Without one, gate.sh runs
+#                   parse_gate_script.gd from this directory instead, so a project needs nothing added to be checked.
 #   --timeout S     wall-clock limit for each engine run (default 120)
 #   --no-import     skip the import (only when the .godot/ cache is current)
 #
@@ -19,7 +20,7 @@
 # Last line and exit code:
 #   GODOT-WARN: CLEAN (...)      0   the gate passed and the --debug pass printed no warning (for the files asked)
 #   GODOT-WARN: FOUND n (...)    1   n warnings, listed above as res://file.gd:LINE: message
-#   GODOT-WARN: FAIL (why)       2   could not check: the gate failed (fix that first), the --debug pass hung, no gate
+#   GODOT-WARN: FAIL (why)       2   could not check: the gate failed (fix that first), the --debug pass hung, ...
 #   GODOT-WARN: NO-ENGINE        3   set GODOT_BIN
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -36,12 +37,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$PROJECT" ] && [ -f "$PROJECT/project.godot" ] || { echo "GODOT-WARN: FAIL (no project.godot in --path '$PROJECT')"; exit 2; }
-[ -f "$PROJECT/${GATE#res://}" ] || {
-  echo "GODOT-WARN: FAIL (no parse gate at $GATE - scaffold it: bash scaffold.sh --path <project> gate)"; exit 2; }
-
-RUNNER="$HERE/godot_run.sh"
-[ -f "$RUNNER" ] || RUNNER="$HERE/../godot-run/godot_run.sh"
-[ -f "$RUNNER" ] || { echo "GODOT-WARN: FAIL (godot_run.sh not found next to warnings.sh or in ../godot-run/)"; exit 2; }
+[ -f "$HERE/gate.sh" ] || { echo "GODOT-WARN: FAIL (gate.sh not found next to warnings.sh)"; exit 2; }
 
 # The files to report on, as res:// paths.
 PABS=$(cd "$PROJECT" && pwd)
@@ -72,9 +68,10 @@ fi
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/godot_warn.XXXXXX")
 IMPORT=(); [ "$DO_IMPORT" = 1 ] || IMPORT=(--no-import)
 # 1. The ordinary gate. A script that does not parse would hang the --debug pass below.
-bash "$RUNNER" --path "$PROJECT" ${IMPORT[@]+"${IMPORT[@]}"} --banner '^PARSE-GATE: PASS' --timeout "$TIMEOUT_S" \
-  --log "$WORK/gate.log" "$GATE" > "$WORK/gate.out" 2>&1
+bash "$HERE/gate.sh" --path "$PROJECT" --gate "$GATE" ${IMPORT[@]+"${IMPORT[@]}"} --timeout "$TIMEOUT_S" \
+  --log "$WORK/gate.log" > "$WORK/gate.out" 2>&1
 rc=$?
+grep '^gate: ' "$WORK/gate.out" | head -1 | sed 's/^/  /'
 [ $rc -eq 3 ] && { cat "$WORK/gate.out"; echo "GODOT-WARN: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; }
 if [ $rc -ne 0 ]; then
   sed 's/^/  /' "$WORK/gate.out"
@@ -82,8 +79,8 @@ if [ $rc -ne 0 ]; then
   exit 2
 fi
 # 2. The same gate with --debug: now every script it loads prints its warnings. stdin closed; the timeout is the guard.
-bash "$RUNNER" --path "$PROJECT" --no-import --banner '^PARSE-GATE: PASS' --timeout "$TIMEOUT_S" \
-  --log "$WORK/debug.log" -- --debug "$GATE" < /dev/null > "$WORK/debug.out" 2>&1
+bash "$HERE/gate.sh" --path "$PROJECT" --gate "$GATE" --no-import --debug --timeout "$TIMEOUT_S" \
+  --log "$WORK/debug.log" < /dev/null > "$WORK/debug.out" 2>&1
 rc=$?
 if [ $rc -ne 0 ]; then
   sed 's/^/  /' "$WORK/debug.out"

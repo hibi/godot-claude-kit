@@ -719,4 +719,31 @@ printf '\n=== KIT warnings.sh: the same file as src/_warn.gd (expect FOUND 6)\n 
 tail -1 "$WORK/logs/warn.out" | sed 's/^/    | /'
 rm -f "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"
 
+# Kit: gate.sh - the project's gate scene when it has one, else parse_gate_script.gd from the skill as --script.
+# GN is a demo copy WITHOUT tools/ (no gate scene, nothing of the kit in it); its scripts name the GameState autoload.
+GATESH="$ROOT/skills/godot-headless-harness/gate.sh"; GN="$WORK/gate_none"
+rm -rf "$GN"; cp -r "$DEMO" "$GN"; rm -rf "$GN/.godot" "$GN/tools"
+gcase() {  # gcase <label> <project> [gate.sh args]
+  local label="$1" p="$2"; shift 2
+  GODOT_BIN="$GODOT_BIN" bash "$GATESH" --path "$p" "$@" > "$WORK/logs/gate.out" 2>&1
+  printf '\n=== KIT gate.sh: %s\n    exit=%s\n' "$label" $?
+  grep -E '^gate: |PARSE-GATE|  FAIL  |^GODOT-RUN' "$WORK/logs/gate.out" | sed 's/^ */    | /' | head -5
+}
+gcase "project without a gate scene (expect script gate, PASS 5 scripts)" "$GN"
+cp "$FIX/syntax_error.gd" "$GN/src/_sabotage.gd"
+gcase "the same with a syntax error (expect FAIL naming _sabotage.gd)" "$GN"
+cp "$FIX/vector2_z.gd" "$GN/src/_sabotage.gd"
+gcase "the same with Vector2.ZERO.z (expect FAIL)" "$GN"
+rm -f "$GN/src/_sabotage.gd" "$GN/src/_sabotage.gd.uid"
+mkdir -p "$GN/addons/thirdparty" "$GN/src/fixtures"; : > "$GN/src/fixtures/.gdignore"
+cp "$FIX/syntax_error.gd" "$GN/addons/thirdparty/broken.gd"; cp "$FIX/syntax_error.gd" "$GN/src/fixtures/broken.gd"
+gcase "broken scripts only in addons/ and a .gdignore dir (expect PASS)" "$GN"
+gcase "--min 99 (expect FAIL: only 5 scripts)" "$GN" --no-import --min 99
+gcase "demo with its own gate scene (expect the scene, PASS)" "$WP" --no-import
+cp "$FIX/warn_cases.gd" "$GN/src/_warn.gd"
+GODOT_BIN="$GODOT_BIN" bash "$WARN" --path "$GN" > "$WORK/logs/warn.out" 2>&1
+printf '\n=== KIT warnings.sh on the project without a gate scene, six-warning script (expect FOUND 6)\n    exit=%s\n' $?
+grep -E '^  gate: |^GODOT-WARN' "$WORK/logs/warn.out" | sed 's/^ */    | /'
+rm -f "$GN/src/_warn.gd" "$GN/src/_warn.gd.uid"
+
 echo; echo "logs: $WORK/logs"

@@ -23,6 +23,17 @@ bash "$RUN" --path . --no-import --banner '^DIAG-HEALTH: PASS' res://tools/diag_
 
 Pass `--no-import` only to the runs after the first one in a session, while no file was added or moved in between.
 
+**A gate without adding anything to the project:** `gate.sh` runs the project's gate scene if it has one. Otherwise
+it runs `parse_gate_script.gd` from this skill's directory as `--script`: the same walk, the same checks, the same
+banner. Use it to check a project you should not modify, or before deciding to scaffold.
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/gate.sh" --path .              # last line: the runner's GODOT-RUN verdict
+bash "${CLAUDE_SKILL_DIR}/gate.sh" --path . --min 40     # script gate: fewer than 40 scripts fails
+```
+
+For CI, scaffold the scene (section 1). `ci.sh` vendors the scene's files into the project, and it requires them.
+
 ## 1. Put them into the project
 
 ```bash
@@ -45,18 +56,19 @@ bash "${CLAUDE_SKILL_DIR}/scaffold.sh" --path . harness enemy_ai  # res://tools/
 **After you scaffold a harness:** it fails on purpose until you replace its placeholder with real checks. A harness
 that passes before anyone wrote a check is a lie.
 
-## 2. Why the gate is a scene
+## 2. Why the gate runs inside the project
 
 These were measured on Godot 4.7.2 with the kit's `tests/measure_traps.sh`:
 
 - **`--import` does not parse scripts.** A hard syntax error, or `Vector2.ZERO.z`, passes it with exit 0 and no output.
 - **`--check-only --script <file>` lies the other way.** It does catch both errors. But it also fails every
-  *correct* script that names an autoload (`Identifier not found: GameState`). The script handed to `--script` is
-  compiled before the project's autoload names exist; scenes loaded later in such a run do see them.
-- **In a scene the autoloads are live.** The gate loads every script fresh (`CACHE_MODE_IGNORE`) and requires it to
-  instantiate. A syntax error then shows up as `FAIL res://... (does not compile)` with exit 1.
-- **The gate skips its own script.** Re-loading the running gate script with `CACHE_MODE_IGNORE` crashed the engine
-  (signal 11).
+  *correct* script that names an autoload (`Identifier not found: GameState`).
+- **Scripts loaded by a running project see the autoloads.** That holds for the gate scene and for the script gate
+  run by `gate.sh`. Each gate loads every script fresh (`CACHE_MODE_IGNORE`) and requires it to instantiate. A syntax
+  error then shows up as `FAIL res://... (does not compile)` with exit 1. A correct script that names an autoload
+  passes.
+- **The gate scene skips its own script.** Re-loading the running gate script with `CACHE_MODE_IGNORE` crashed the
+  engine (signal 11). The script gate lives outside `res://`, so the walk never reaches it.
 
 ## 3. The harness contract
 
@@ -125,7 +137,7 @@ bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path .                          # whole
 bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path . src/player.gd src/hud.gd  # only what you changed
 ```
 
-1. It runs the gate normally.
+1. It runs the gate normally: the project's gate scene, or the script gate when there is none (see the top).
 2. Only after a PASS does it run the gate again with `--debug`, under a wall-clock timeout.
 3. It prints each warning as `res://file.gd:LINE: message`, skipping `res://addons/`.
 4. If `missing_await` is off, it adds a note saying so. Un-awaited coroutine calls then have to be checked by hand.
@@ -134,7 +146,7 @@ bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path . src/player.gd src/hud.gd  # only
 |---|---|---|
 | `GODOT-WARN: CLEAN (...)` | 0 | no warning in the files asked (or the whole project) |
 | `GODOT-WARN: FOUND n (...)` | 1 | n warnings, listed above it |
-| `GODOT-WARN: FAIL (why)` | 2 | could not check: no gate, the gate failed, or the `--debug` pass did not finish |
+| `GODOT-WARN: FAIL (why)` | 2 | could not check: the gate failed, the `--debug` pass did not finish, a file is not in the project, or warnings are off |
 | `GODOT-WARN: NO-ENGINE` | 3 | no binary |
 
 The project's own warning settings apply. A warning the project set to "error" fails the gate, like any parse error.

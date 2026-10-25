@@ -7,8 +7,9 @@ extends Node
 ##
 ## Why a scene and not a flag: `--import` (and `--export-release`) do not parse-check scripts - a hard syntax error
 ## passes both with exit 0. `--check-only --script <file>` does report it, but also reports a false
-## "Identifier not found: <Autoload>" on every script that names an autoload, because a --script run never
-## instantiates autoloads. In a SCENE the autoloads are live, so a scene can load every script honestly.
+## "Identifier not found: <Autoload>" on every script that names an autoload. Scripts loaded by a running project
+## (this scene, or the skill's parse_gate_script.gd run by gate.sh) do see the autoloads - measured - so they
+## load honestly.
 ##
 ## Each script is loaded fresh (CACHE_MODE_IGNORE, or a cached copy would be handed back without a re-parse) and must
 ## come back as a script that can instantiate, or one declared @abstract. A floor on the count keeps a walk that found

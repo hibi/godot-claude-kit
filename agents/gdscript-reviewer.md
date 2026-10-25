@@ -45,7 +45,6 @@ Read the result by its last line:
 | `GODOT-WARN: FOUND n` | each `res://file.gd:LINE: message` it lists is a finding, with that line as evidence |
 | `GODOT-WARN: CLEAN` | no engine warnings in the changed files |
 | `GODOT-WARN: FAIL (the parse gate did not pass ...)` | the project **does not compile**. That is the top finding; quote the gate's `FAIL res://...` lines |
-| `GODOT-WARN: FAIL (no parse gate ...)` | say so; recommend the gate (skill `godot-headless-harness`). Continue with section 3 |
 | `GODOT-WARN: FAIL (not in the project: ...)` | your paths were wrong (e.g. repo-root-relative while the project is in a subdirectory). Pass them relative to the project, or as `res://`, and run again |
 | `GODOT-WARN: FAIL (... warnings/enable=false ...)` | the project switched warnings off. Engine warnings cannot be checked; say so. Continue with section 3 |
 | `GODOT-WARN: NO-ENGINE` | say the engine checks could not run (no `GODOT_BIN`). Continue with section 3 |
