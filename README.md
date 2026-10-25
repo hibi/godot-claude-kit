@@ -123,7 +123,7 @@ It answers a different question: *did that run really prove what the agent claim
 |---|---|---|
 | Windows 10, Git Bash and PowerShell 5.1 | 4.7.2 stable, GUT 9.7.1, gdUnit4 6.2.2; screenshots on an NVIDIA GPU (Vulkan and OpenGL) | `measure_traps.sh`: every trap above, the multiplayer, test-framework and screenshot traps, and each sabotage case of the runner, gate, harnesses, `net_run.sh`, `rpc_check.sh`, `test_run.sh`, `shot.sh` and `ci.sh` |
 | Linux (Debian, WSL2) | 4.7.2 stable (official Linux build), GUT 9.7.1, gdUnit4 6.2.2; screenshots under xvfb with Mesa llvmpipe | `measure_traps.sh`, the same set (the Windows-only PowerShell traps skip themselves), and the generated workflow's steps executed verbatim |
-| GitHub Actions, `ubuntu-latest` | 4.7.2 stable | the kit's own workflow: `ci.sh` on the demo, on every push |
+| GitHub Actions, `ubuntu-latest` | 4.7.2 stable; screenshots under xvfb with Mesa llvmpipe | the kit's own workflow on every push: `ci.sh` on the demo, including a screenshot compared with a golden rendered on that runner (`--require-shots`) |
 
 The skills were also tested by a fresh Claude Code session with only the plugin loaded and a plain prompt. The skills
 triggered by themselves, and the verdicts matched the ground truth (PASS on the clean demo, FAIL naming the broken
