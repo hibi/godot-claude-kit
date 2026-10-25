@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/net/net_match.gd" id="1"]
+[ext_resource type="Script" path="res://src/health.gd" id="2"]
+
+[node name="NetMatch" type="Node"]
+script = ExtResource("1")
+
+[node name="Target" type="Node" parent="."]
+script = ExtResource("2")

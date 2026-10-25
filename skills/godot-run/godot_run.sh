@@ -10,6 +10,9 @@
 #                          loads does not exit by itself.
 #   --timeout S            wall-clock backstop in seconds for each engine process (default 600), if `timeout` exists.
 #   --no-import            skip the `--import` step (only when you know the .godot/ cache is current).
+#   --import-only          run only the isolated `--import` and stop (GODOT-RUN: IMPORTED). For several processes
+#                          on one project: import once, then start each of them with --no-import - parallel
+#                          imports would write the same .godot/ cache at once.
 #   --allow-engine-errors  report `ERROR:` lines instead of failing on them (SCRIPT ERROR / Parse Error always fail).
 #   --log FILE             where to keep the run log (default: a fresh temp dir; the path is printed either way).
 #
@@ -20,9 +23,10 @@
 #   GODOT-RUN: FAIL (why)    1
 #   GODOT-RUN: UNVERIFIED    2   no --banner given and nothing went wrong - which proves nothing ran either
 #   GODOT-RUN: NO-ENGINE     3   no binary found: set GODOT_BIN
+#   GODOT-RUN: IMPORTED      0   --import-only: the import exited 0 (which says nothing about the scripts)
 set -u
 
-PROJECT="" BANNER="" FRAMES=3600 TIMEOUT_S=600 DO_IMPORT=1 ALLOW_ERRORS=0 LOG=""
+PROJECT="" BANNER="" FRAMES=3600 TIMEOUT_S=600 DO_IMPORT=1 IMPORT_ONLY=0 ALLOW_ERRORS=0 LOG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="$2"; shift 2 ;;
@@ -30,6 +34,7 @@ while [ $# -gt 0 ]; do
     --frames) FRAMES="$2"; shift 2 ;;
     --timeout) TIMEOUT_S="$2"; shift 2 ;;
     --no-import) DO_IMPORT=0; shift ;;
+    --import-only) IMPORT_ONLY=1; shift ;;
     --allow-engine-errors) ALLOW_ERRORS=1; shift ;;
     --log) LOG="$2"; shift 2 ;;
     --) shift; break ;;
@@ -65,7 +70,7 @@ engine() {  # engine <logfile> <args...>
 }
 
 echo "engine:  $("$BIN" --version 2>/dev/null | tr -d '\r')"
-if [ "$DO_IMPORT" = 1 ]; then
+if [ "$DO_IMPORT" = 1 ] || [ "$IMPORT_ONLY" = 1 ]; then
   # A fresh clone has no .godot/ cache: until --import runs, class_name types are unknown and correct scripts
   # fail to parse. --import itself does NOT parse-check scripts (a syntax error passes it with exit 0).
   engine "$IMPORT_LOG" --headless --path "$PROJECT" --import
@@ -74,6 +79,11 @@ if [ "$DO_IMPORT" = 1 ]; then
     echo "import:  exit $ie, log $(show_path "$IMPORT_LOG")"; tr -d '\r' < "$IMPORT_LOG" | tail -5
     echo "GODOT-RUN: FAIL (--import exit $ie)"; rm -rf "$WORK/home"; exit 1
   fi
+fi
+if [ "$IMPORT_ONLY" = 1 ]; then
+  rm -rf "$WORK/home"
+  echo "import:  exit 0, log $(show_path "$IMPORT_LOG")"
+  echo "GODOT-RUN: IMPORTED"; exit 0
 fi
 
 engine "$LOG" --headless --path "$PROJECT" --quit-after "$FRAMES" "$@"

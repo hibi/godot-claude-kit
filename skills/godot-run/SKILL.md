@@ -60,6 +60,11 @@ The runner handles every step for you:
 | `GODOT-RUN: FAIL (<reasons>)` | 1 | each reason listed: engine exit, script error, ERROR line, FAIL line, banner missing, timeout |
 | `GODOT-RUN: UNVERIFIED (...)` | 2 | no `--banner` given and nothing went wrong. That also proves nothing ran |
 | `GODOT-RUN: NO-ENGINE` | 3 | no binary: ask the user, set `GODOT_BIN` |
+| `GODOT-RUN: IMPORTED` | 0 | `--import-only`: the isolated import exited 0. That says nothing about the scripts. |
+
+**Several engine processes on one project** (a server and its clients): import once with `--import-only`, then start
+each process with `--no-import`. Parallel imports would write the same `.godot/` cache at the same time. The
+`godot-multiplayer-harness` skill's `net_run.sh` does exactly this.
 
 The runner prints the log path. Read the log whenever the verdict is not PASS. Pass `--allow-engine-errors` only when
 the project has known, unrelated `ERROR:` noise, and say so when you report.

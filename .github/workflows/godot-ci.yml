@@ -23,7 +23,7 @@ jobs:
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
 
       - name: Import, parse gate, harnesses
-        run: bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 1 --out "$RUNNER_TEMP/godot-ci-logs"
+        run: bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --out "$RUNNER_TEMP/godot-ci-logs"
 
       - name: Keep the logs
         if: always()

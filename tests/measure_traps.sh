@@ -220,7 +220,7 @@ ci_case "clean demo (expect PASS)" ":"
 ci_case "syntax error in src/ (expect FAIL: gate)" "cp '$FIX/syntax_error.gd' src/_sabotage.gd"
 ci_case "Health clamp removed (expect FAIL: diag_health)" "cp '$FIX/health_no_clamp.gd' src/health.gd"
 ci_case "gate scene missing (expect FAIL: gate; diag_health still PASS)" "rm tools/ci/parse_gate.tscn"
-ci_case "--min-harnesses 2 with one harness (expect FAIL)" ":" --min-harnesses 2
+ci_case "--min-harnesses 3 with two harnesses (expect FAIL)" ":" --min-harnesses 3
 
 # Kit: `ci.sh install` into a git repo whose Godot project sits in game/. The workflow must point at game/ (a path
 # comparison once produced a bogus absolute-ish path on Git Bash, where /tmp and %TEMP% are one directory), and the
@@ -234,5 +234,139 @@ if command -v git > /dev/null; then
 else
   printf '\n=== KIT ci.sh install: SKIPPED (no git on this machine)\n'
 fi
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Multiplayer (ENet, loopback). N1-N7 run tests/sabotage/net_probe.gd as a --script in a demo copy; the KIT net cases
+# run the demo's two-process harness through net_run.sh, one sabotage at a time.
+NETC="$WORK/net"; rm -rf "$NETC"; cp -r "$DEMO" "$NETC"; rm -rf "$NETC/.godot"
+cp "$FIX/net_probe.gd" "$NETC/_net_probe.gd"; cp "$FIX/hold_udp_port.gd" "$NETC/_hold_udp_port.gd"
+godot --headless --path "$NETC" --import > "$WORK/logs/net_import.log" 2>&1
+NP=$((30000 + RANDOM % 20000))
+now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+probe() {  # probe <log> <seconds> <user args...>: one probe process, bounded by timeout
+  local log="$1" s="$2"; shift 2
+  timeout "$s" "$GODOT_BIN" --headless --path "$NETC" --script res://_net_probe.gd -- "$@" > "$WORK/logs/$log" 2>&1
+}
+nshow() {  # nshow <label> <log...>: the probe's own lines and every ERROR, per log
+  printf '\n=== %s\n' "$1"; shift
+  for l in "$@"; do
+    echo "    -- $l"
+    tr -d '\r' < "$WORK/logs/$l" | grep -E '^\[|^ERROR|^SCRIPT ERROR|exit=' | grep -v 'Unreferenced static|RID allocations|PagedAllocator' \
+      | sed 's/^/    | /' | head -12
+  done
+}
+engines_left() {
+  if command -v tasklist >/dev/null; then tasklist //FO CSV //NH | grep -ci "$(basename "$GODOT_BIN")"
+  else pgrep -fc "$(basename "$GODOT_BIN")"; fi
+}
+
+probe n1_busy.log 20 --role=busy --port=$NP; echo "exit=$?" >> "$WORK/logs/n1_busy.log"
+nshow "N1 create_server twice on one port (one process)" n1_busy.log
+
+probe n2_server.log 30 --role=server --port=$((NP + 1)) & sleep 1
+probe n2_client.log 30 --role=client --port=$((NP + 1)); echo "exit=$?" >> "$WORK/logs/n2_client.log"; wait
+echo "exit=(server, see above)" >> "$WORK/logs/n2_server.log"
+nshow "N2 client calls .rpc() on a function WITHOUT @rpc, and rpc_id() with an unknown name" n2_client.log n2_server.log
+
+probe n3_server.log 30 --role=server --port=$((NP + 2)) & sleep 1
+probe n3_client.log 30 --role=client --port=$((NP + 2)) --root=ProbeElsewhere; echo "exit=$?" >> "$WORK/logs/n3_client.log"; wait
+nshow "N3 server node /root/Probe, client node /root/ProbeElsewhere (same script)" n3_client.log n3_server.log
+
+t=$(now_ms); probe n4_noserver.log 120 --role=noserver --port=$((NP + 3)); e=$?
+nshow "N4 client, nobody listening (exit=$e, wall=$(( $(now_ms) - t )) ms)" n4_noserver.log
+
+t=$(now_ms); probe n5_client.log 30 --role=client --port=$((NP + 4)) & sleep 2
+probe n5_server.log 30 --role=server --port=$((NP + 4)); wait
+nshow "N5 client started 2 s BEFORE the server (client timings are from its own start)" n5_client.log
+
+probe n6_server.log 3 --role=server --port=$((NP + 5)) & sleep 1
+probe n6_idle.log 60 --role=idle --port=$((NP + 5)); wait
+nshow "N6 server killed by timeout 3 s while a client is connected (client started 1 s after it)" n6_idle.log
+probe n7_busy.log 20 --role=busy --port=$((NP + 5))
+nshow "N7 the same port right after that kill (first create_server: 0 = free)" n7_busy.log
+
+# A plain script that calls .rpc() on a non-@rpc function compiles: the parse gate cannot see N2.
+printf 'extends Node\n\nfunc not_an_rpc() -> void:\n\tpass\n\nfunc send() -> void:\n\tnot_an_rpc.rpc()\n\trpc_id(1, "no_such_method")\n' \
+  > "$NETC/src/_sabotage.gd"
+godot --headless --path "$NETC" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/n_gate.log" 2>&1
+show "N8 parse gate with a script calling .rpc() on a non-@rpc function and rpc_id() with an unknown name" $? \
+  "$WORK/logs/n_gate.log"
+rm -f "$NETC/src/_sabotage.gd"
+
+NET="$ROOT/skills/godot-multiplayer-harness/net_run.sh"
+net_case() {  # net_case <label> [net_run.sh args...] - runs the demo harness, prints per-role verdicts
+  local label="$1"; shift
+  local t; t=$(now_ms)
+  GODOT_BIN="$GODOT_BIN" bash "$NET" --path "$NETC" --no-import "$@" res://tools/netdiag_hits.tscn > "$WORK/logs/net.out" 2>&1
+  local e=$?
+  printf '\n=== KIT net_run.sh: %s\n    exit=%s wall=%s ms engine processes left=%s\n' "$label" $e $(( $(now_ms) - t )) "$(engines_left)"
+  grep -E '^== |GODOT-RUN|GODOT-NET|^ +\| +[0-9]+: *(FAIL|ERROR|SCRIPT)' "$WORK/logs/net.out" | sed 's/^ */    | /'
+}
+H="$NETC/tools/netdiag_hits.gd"; M="$NETC/src/net/net_match.gd"
+cp "$H" "$WORK/netdiag_hits.orig"; cp "$M" "$WORK/net_match.orig"
+net_case "clean demo (expect PASS)" --port $((NP + 10))
+sed -i 's/^func _server() -> void:$/&\n\t_check("sabotage: server-side failure", false, "on purpose")/' "$H"
+net_case "a FAIL on the server side only (expect server FAIL, client PASS, verdict FAIL)" --port $((NP + 11))
+cp "$WORK/netdiag_hits.orig" "$H"
+sed -i 's/^func _client() -> void:$/&\n\t_check("sabotage: client-side failure", false, "on purpose")/' "$H"
+net_case "a FAIL on the client side only (expect client FAIL, server PASS, verdict FAIL)" --port $((NP + 12))
+cp "$WORK/netdiag_hits.orig" "$H"
+sed -i 's/^\tadd_child(_match)$/&\n\tif role == "client":\n\t\t_match.name = "NetMatchElsewhere"/' "$H"
+net_case "client's NetMatch at another node path (expect FAIL)" --port $((NP + 13))
+cp "$WORK/netdiag_hits.orig" "$H"
+sed -i '/^@rpc("authority", "call_remote", "reliable")$/d' "$M"
+net_case "game code: @rpc removed from sync_hp (expect FAIL)" --port $((NP + 14))
+cp "$WORK/net_match.orig" "$M"
+timeout 60 "$GODOT_BIN" --headless --path "$NETC" --script res://_hold_udp_port.gd -- --port=$((NP + 15)) --seconds=40 \
+  > "$WORK/logs/net_hold.log" 2>&1 & hold=$!
+sleep 1
+net_case "port already taken by a plain UDP socket (expect FAIL, bounded by the harness WAIT, not ENet's 31 s)" \
+  --port $((NP + 15))
+kill $hold 2>/dev/null; wait $hold 2>/dev/null
+tr -d '\r' < "$WORK/logs/net_hold.log" | grep '^\[hold\]' | sed 's/^/    | /'
+echo "    (the count above includes the port holder; after stopping it: engine processes left=$(engines_left))"
+cmp -s "$H" "$WORK/netdiag_hits.orig" && cmp -s "$M" "$WORK/net_match.orig" && echo "    (harness and net_match restored)"
+
+# Kit: the multiplayer scaffold - a fresh harness FAILS on both sides; with the placeholders gone the template's own
+# skeleton (listen, connect, done handshake) PASSES, with one client and with three.
+NS="$ROOT/skills/godot-multiplayer-harness/scaffold.sh"
+bash "$NS" --path "$NETC" probe > /dev/null
+nscaffold() {  # nscaffold <label> [net_run.sh args...]
+  local label="$1"; shift
+  GODOT_BIN="$GODOT_BIN" bash "$NET" --path "$NETC" "$@" res://tools/netdiag_probe.tscn > "$WORK/logs/net_scaffold.out" 2>&1
+  printf '\n=== KIT net scaffold: %s\n    exit=%s\n' "$label" $?
+  grep -E '^== |GODOT-NET|^ +\| +[0-9]+: *(ok|FAIL)' "$WORK/logs/net_scaffold.out" | sed 's/^ */    | /'
+}
+nscaffold "fresh harness (expect FAIL on both sides: placeholders)" --port $((NP + 20))
+sed -i '/placeholder replaced by real/d; s/^const EXPECTED := {"server": 4, "client": 2}$/const EXPECTED := {"server": 3, "client": 1}/' \
+  "$NETC/tools/netdiag_probe.gd"
+nscaffold "placeholders removed, template skeleton only (expect PASS)" --no-import --port $((NP + 21))
+nscaffold "the same with --clients 3 (expect PASS, server + 3 clients)" --no-import --clients 3 --port $((NP + 22))
+
+# Kit: the static RPC check - clean demo, the sync_hp sabotage, and the edge-case fixture (exactly 3 BAD lines).
+RC="$ROOT/skills/godot-multiplayer-harness/rpc_check.sh"
+rc_case() {  # rc_case <label> <project>
+  bash "$RC" --path "$2" > "$WORK/logs/rpc_check.out" 2>&1
+  printf '\n=== KIT rpc_check.sh: %s\n    exit=%s\n' "$1" $?
+  sed 's/^ */    | /' "$WORK/logs/rpc_check.out"
+}
+# The probes misuse RPCs on purpose (N2) - they would be (rightly) reported here.
+rm -rf "$NETC/tools/netdiag_probe.gd" "$NETC/tools/netdiag_probe.tscn" "$NETC/_net_probe.gd" "$NETC/_hold_udp_port.gd"
+rc_case "demo (expect PASS)" "$NETC"
+sed -i '/^@rpc("authority", "call_remote", "reliable")$/d' "$M"
+rc_case "@rpc removed from sync_hp (expect FAIL naming net_match.gd sync_hp)" "$NETC"
+cp "$WORK/net_match.orig" "$M"
+cp "$FIX/rpc_cases.gd" "$NETC/src/_rpc_cases.gd"; mkdir -p "$NETC/addons/thirdparty"; cp "$FIX/rpc_addon.gd" "$NETC/addons/thirdparty/rpc_addon.gd"
+rc_case "edge cases: same-line @rpc, annotation stack, object form, StringName, rpc_config, addon declaration + addon bad call, comment, string, variable (expect exactly the 3 BAD lines)" "$NETC"
+rm -rf "$NETC/src/_rpc_cases.gd" "$NETC/addons/thirdparty"
+
+# Kit: runner --import-only on a fresh copy, then a --no-import run must find the cache.
+IO="$WORK/importonly"; rm -rf "$IO"; cp -r "$DEMO" "$IO"; rm -rf "$IO/.godot"
+GODOT_BIN="$GODOT_BIN" bash "$ROOT/skills/godot-run/godot_run.sh" --path "$IO" --import-only > "$WORK/logs/importonly.out" 2>&1
+printf '\n=== KIT godot_run.sh --import-only on a fresh copy (expect IMPORTED, .godot/ created)\n    exit=%s, .godot exists=%s\n' \
+  $? "$([ -d "$IO/.godot" ] && echo yes || echo no)"
+grep 'GODOT-RUN' "$WORK/logs/importonly.out" | sed 's/^/    | /'
+GODOT_BIN="$GODOT_BIN" bash "$ROOT/skills/godot-run/godot_run.sh" --path "$IO" --no-import --banner '^DIAG-HEALTH: PASS' \
+  res://tools/diag_health.tscn 2>&1 | tail -1 | sed 's/^/    | then --no-import diag_health: /'
 
 echo; echo "logs: $WORK/logs"
