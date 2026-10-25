@@ -50,6 +50,8 @@ Other options:
 - `--test-dir res://...` (repeatable), `--test-framework gut|gdunit` (when both are installed) and `--min-tests N`
   (default 1) go to the unit-test run.
 - `--shot-dir res://...`: the directory of golden screenshots, written by `shot.sh --update-golden`.
+- `--require-shots`: every golden must really be compared. No display, or a golden from another renderer (for example
+  after a CI image update changed the Mesa version), is then a FAIL instead of a SKIP or a "not compared" note.
 - `--no-rpc-check`: skips the static RPC check. Use it only for a project the check misreads (it matches by name),
   and say so when you report. The multiplayer harnesses still run.
 

@@ -22,6 +22,8 @@
 #                         with shot.sh and compared. A golden from another driver/GPU is not compared (the frame is
 #                         still checked: drawn, right size, not blank, no engine error). No display (Linux without
 #                         xvfb-run): the summary says SKIP, never PASS.
+#   --require-shots       every golden must really be compared: no display, or a golden from another renderer
+#                         (e.g. after a CI image update bumped Mesa), is a FAIL instead of a SKIP / "not compared" note
 #   install only:  --dir D (project-relative, default tools/ci), --godot-version V (e.g. 4.7.2-stable; default:
 #                  read from the engine in GODOT_BIN / PATH)
 #
@@ -38,11 +40,12 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 PROJECT="" GATE="res://tools/ci/parse_gate.tscn" MIN_H=0 OUT="" DIR="tools/ci" GVER="" RPC=1 RUNARGS=() ARGS=()
-TESTARGS=() TESTDIRS=0 SHOTDIR=""
+TESTARGS=() TESTDIRS=0 SHOTDIR="" REQ_SHOTS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="${2%/}"; shift 2 ;;
     --shot-dir) SHOTDIR="${2%/}"; SHOTDIR="${SHOTDIR#res://}"; shift 2 ;;
+    --require-shots) REQ_SHOTS=1; shift ;;
     --gate) GATE="$2"; shift 2 ;;
     --no-rpc-check) RPC=0; shift ;;
     --test-dir) TESTARGS+=(--dir "$2"); TESTDIRS=1; shift 2 ;;
@@ -223,6 +226,9 @@ fi
 
 # Golden screenshots: re-shoot each <name>.png that has a <name>.json (scene + size) next to it.
 SHOTS="none" ns=0 nsu=0
+if [ -z "$SHOTDIR" ] && [ $REQ_SHOTS = 1 ]; then
+  RESULTS+=("FAIL  shot  --require-shots without --shot-dir"); failed+=("shots"); n=$((n + 1))
+fi
 if [ -n "$SHOTDIR" ]; then
   if [ ! -f "$SHOT" ]; then
     RESULTS+=("FAIL  shot  $SHOTDIR (shot.sh not found next to ci.sh or in ../godot-screenshot/)"); failed+=("shots"); n=$((n + 1))
@@ -244,12 +250,18 @@ if [ -n "$SHOTDIR" ]; then
       IMPORT=(--no-import)
       sed 's/^/   /' "$OUT/shot.out"
       [ $rc -eq 3 ] && { echo "GODOT-CI: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; }
-      if [ $rc -eq 4 ]; then
+      if [ $rc -eq 4 ] && [ $REQ_SHOTS = 1 ]; then
+        RESULTS+=("FAIL  shot  ${#goldens[@]} golden(s) in res://$SHOTDIR (no display, and --require-shots)")
+        failed+=("shots"); break
+      elif [ $rc -eq 4 ]; then
         RESULTS+=("SKIP  shot  ${#goldens[@]} golden(s) in res://$SHOTDIR (no display: install xvfb)"); SHOTS="SKIPPED"
         n=$((n - 1)); break
       fi
       SHOTS="ran"
       if [ $rc -eq 0 ]; then ns=$((ns + 1)); RESULTS+=("PASS  shot  $g")
+      elif [ $rc -eq 2 ] && [ $REQ_SHOTS = 1 ]; then
+        RESULTS+=("FAIL  shot  $g (golden from another renderer, not compared: re-make it here with shot.sh --update-golden)")
+        failed+=("shot:$g")
       elif [ $rc -eq 2 ]; then
         ns=$((ns + 1)); nsu=$((nsu + 1)); RESULTS+=("PASS  shot  $g (frame ok; golden not compared: other renderer)")
       else RESULTS+=("FAIL  shot  $g"); failed+=("shot:$g"); fi

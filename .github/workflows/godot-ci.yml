@@ -22,8 +22,20 @@ jobs:
           chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64"
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
 
+      - name: Virtual display for screenshots
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libfontconfig1
+
       - name: Import, parse gate, harnesses
         run: bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --out "$RUNNER_TEMP/godot-ci-logs"
+
+      # One-off (step 1 of 2): render the demo's golden screenshot ON this runner, so its fingerprint (driver, Mesa
+      # version) matches later runs. It lands in the godot-ci-logs artifact; step 2 commits it and turns on the compare.
+      - name: Golden screenshot for the demo (one-off)
+        run: |
+          bash "skills/godot-screenshot/shot.sh" --path "demo" --out "$RUNNER_TEMP/godot-ci-logs/shots/main.png" \
+            --golden "$RUNNER_TEMP/godot-ci-logs/golden/main.png" --update-golden
 
       - name: Keep the logs
         if: always()

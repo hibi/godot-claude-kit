@@ -582,6 +582,18 @@ if can_draw; then
   GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots > "$CIS" 2>&1
   printf '\n=== KIT ci.sh --shot-dir, restored (expect PASS, 1 shot)\n    exit=%s\n' $?
   grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+  # A golden whose fingerprint no longer matches (as after a CI image update bumped Mesa): a note, or with
+  # --require-shots a FAIL.
+  mkdir -p "$SP/tests/shots_other"; : > "$SP/tests/shots_other/.gdignore"
+  cp "$SP/tests/shots/main.png" "$SP/tests/shots_other/main.png"
+  sed 's/"api": "[^"]*"/"api": "0.0 (another driver)"/' "$SP/tests/shots/main.json" > "$SP/tests/shots_other/main.json"
+  for req in "" --require-shots; do
+    GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots_other $req > "$CIS" 2>&1
+    rc=$?   # before the $(...) below, which would overwrite it
+    printf '\n=== KIT ci.sh --shot-dir %s, golden from another renderer (expect %s)\n    exit=%s\n' "$req" \
+      "$([ -n "$req" ] && echo FAIL || echo 'PASS, not compared')" $rc
+    grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+  done
 else
   printf '\n=== KIT shot.sh drawing cases: SKIPPED (no display and no xvfb-run)\n'
 fi
@@ -600,6 +612,10 @@ if [ "$(uname -s)" = Linux ]; then
     env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots \
       > "$CIS" 2>&1
     printf '\n=== KIT ci.sh --shot-dir (Linux) without display and xvfb-run (expect PASS with shots SKIPPED)\n    exit=%s\n' $?
+    grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+    env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots \
+      --require-shots > "$CIS" 2>&1
+    printf '\n=== KIT ci.sh --shot-dir --require-shots (Linux) without display and xvfb-run (expect FAIL)\n    exit=%s\n' $?
     grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
   fi
 fi
