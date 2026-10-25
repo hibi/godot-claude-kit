@@ -23,6 +23,10 @@ In Godot 4 that proves nothing. Every row below exits **0**:
 
 There are also false alarms. For example, `--check-only --script` fails every *correct* script that uses an autoload.
 
+Godot's own GDScript warnings (unused variable, shadowing, integer division, unreachable code) never show up in a
+headless run unless you pass `--debug`. With `--debug`, a script that does not parse stops at a `debug>` prompt; on
+Windows the engine then hangs forever. The warning for calling a coroutine without `await` is off by default.
+
 Multiplayer is worse. Both of these leave server and client exiting 0:
 
 - An RPC to a function without `@rpc` logs its error only on the **sending** side.
@@ -60,15 +64,19 @@ by [`tests/measure_traps.sh`](tests/measure_traps.sh). If a claim does not repro
 | Skill | What it gives Claude |
 |---|---|
 | **`godot-run`** | A runner (`godot_run.sh`). It finds the engine and isolates the run from your editor settings and `user://` data. It imports when needed, always has a `--quit-after` and wall-clock backstop, and judges the log: `PASS` / `FAIL (reasons)` / `UNVERIFIED` / `NO-ENGINE`. It also covers the Windows PowerShell pitfalls (a GUI build that returns instantly, UTF-16 logs). |
-| **`godot-headless-harness`** | A **parse gate** scene that checks every GDScript compiles, with autoloads live. A **diag harness** template that drives your real scenes and autoloads, with coverage counting, so an un-awaited check cannot pass silently. A scaffold script, and the rule that every new check must be seen failing before it counts. |
+| **`godot-headless-harness`** | A **parse gate** scene that checks every GDScript compiles, with autoloads live. A **diag harness** template that drives your real scenes and autoloads, with coverage counting, so an un-awaited check cannot pass silently. A scaffold script, and the rule that every new check must be seen failing before it counts. `warnings.sh` lists the engine's **GDScript warnings** as `file:line`, which a normal headless run never prints. |
 | **`godot-multiplayer-harness`** | A real headless **server and client(s) as separate engine processes**, started by `net_run.sh`, which judges every process's log and passes only when all of them pass. A harness template: one scene for both roles, a short timeout on every network wait, a "client done" handshake, loopback-only binding. A static **RPC check** that every RPC the project sends lands on an `@rpc` function. |
 | **`godot-unit-tests`** | Runs your **GUT or gdUnit4** tests through the runner with the flags that avoid their traps. It judges them by the framework's exit code, its **JUnit XML** (fresh every run, a missing one is a FAIL) and the lines where they exit 0 without testing: a dropped test file, nothing run, no test cases. A `--min-tests` floor counts tests that *passed*. Reports never land in your project. |
 | **`godot-screenshot`** | Renders a scene to a PNG in a real window, parked off-screen (on Linux: xvfb). It fails a frame that is blank, the wrong size or comes with engine errors. It compares the frame with a **golden image**, but only one rendered by the same driver and GPU. Then Claude has to **open the PNG and say what it sees**. No capture script or scene is added to your project. |
 | **`godot-ci`** | One command for the whole project: import, the parse gate, the RPC check, every `diag_*` and `netdiag_*` harness, the unit tests and the golden screenshots, with one verdict. `install` writes a GitHub Actions workflow that runs the same script on Linux. |
 
+| Agent | What it does |
+|---|---|
+| **`gdscript-reviewer`** | Reviews your GDScript changes, read-only. Every finding comes with evidence: the parse gate, the engine's warnings, the RPC check, or the code itself. It also checks the traps the engine stays silent about: a coroutine called without `await`, and a `$Node` path the scene does not have. If it finds nothing, it says `REVIEW: clean`, and it does not invent findings. |
+
 The skills trigger on their own. Ask Claude to "check that everything still compiles", "verify the damage fix",
-"test the multiplayer hit sync", "run the unit tests", "check the HUD still looks right" or "set up CI for this Godot
-project", and it picks the right one.
+"test the multiplayer hit sync", "run the unit tests", "check the HUD still looks right", "review my changes" or "set
+up CI for this Godot project", and it picks the right one.
 
 ## Install
 
@@ -139,14 +147,11 @@ skills/godot-multiplayer-harness/   net_run.sh, rpc_check.sh, netdiag template, 
 skills/godot-unit-tests/   test_run.sh (GUT / gdUnit4)
 skills/godot-screenshot/   shot.sh + its capture script (PNG, blank-frame check, golden compare)
 skills/godot-ci/       ci.sh, GitHub Actions template
+agents/gdscript-reviewer.md   the read-only review agent
 demo/                  small Godot 4 project every claim is measured on
 tests/measure_traps.sh reproduces every trap; tests/sabotage/ holds the broken-on-purpose fixtures,
                        tests/fixtures/ the GUT / gdUnit4 tests it runs (the frameworks are downloaded, pinned by sha256)
 ```
-
-## Roadmap
-
-- A GDScript reviewer agent.
 
 ## License
 

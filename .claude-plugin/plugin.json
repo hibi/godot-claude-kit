@@ -1,6 +1,6 @@
 {
   "name": "godot-kit",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
   "author": {
     "name": "Jakub Hübner",

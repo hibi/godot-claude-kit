@@ -632,4 +632,91 @@ if [ "$(uname -s)" = Linux ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------------------------------------------------
+# GDScript warnings and review traps. W1-W5 run the engine on a demo copy with one fixture at a time; the KIT cases
+# run warnings.sh (skill godot-headless-harness).
+WP="$WORK/warn"; rm -rf "$WP"; cp -r "$DEMO" "$WP"; rm -rf "$WP/.godot"
+wimport() { "$GODOT_BIN" --headless --path "$WP" --import > "$WORK/logs/w_import.log" 2>&1; }
+wcount() { tr -d '\r' < "$1" | grep -c '^WARNING: .*' ; }
+wshow() {  # wshow <label> <exit> <log>: exit, WARNING count, the warnings with their file:line
+  printf '\n=== %s\n    exit=%s, WARNING lines: %s\n' "$1" "$2" "$(tr -d '\r' < "$3" | grep -c '^WARNING')"
+  tr -d '\r' < "$3" | awk '/^WARNING: /{m=substr($0,10);next} m!="" && /at: GDScript::reload/{l=$0;sub(/.*\(/,"",l);sub(/\).*/,"",l);print "    | " l ": " m} {m=""}' | head -8
+  tr -d '\r' < "$3" | grep -E '^(PARSE-GATE|Debugger Break)|^ERROR: Node not found|^TRAP:' | sed 's/^/    | /' | head -3
+}
+cp "$FIX/warn_cases.gd" "$WP/src/_warn.gd"; wimport
+timeout 60 "$GODOT_BIN" --headless --path "$WP" --check-only --script res://src/_warn.gd < /dev/null > "$WORK/logs/w1a.log" 2>&1
+wshow "W1 --check-only on a script with six warnings" $? "$WORK/logs/w1a.log"
+timeout 60 "$GODOT_BIN" --headless --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w1b.log" 2>&1
+wshow "W1 parse gate with that script" $? "$WORK/logs/w1b.log"
+timeout 60 "$GODOT_BIN" --headless --debug --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w1c.log" 2>&1
+wshow "W1 the same gate with --debug" $? "$WORK/logs/w1c.log"
+cp "$FIX/syntax_error.gd" "$WP/src/_bad.gd"; wimport
+# In a subshell that waits (the `exit` keeps bash from exec-ing the command): on Linux this crashes, and bash's own
+# crash message must land in the log, not over this script's output.
+( timeout 30 "$GODOT_BIN" --headless --debug --path "$WP" --check-only --script res://src/_bad.gd < /dev/null; exit $? ) \
+  > "$WORK/logs/w2a.log" 2>&1
+wshow "W2 --debug --check-only on a syntax error, stdin closed (timeout 30 s)" $? "$WORK/logs/w2a.log"
+timeout 30 "$GODOT_BIN" --headless --debug --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w2b.log" 2>&1
+wshow "W2 --debug parse gate with that syntax error, stdin closed (timeout 30 s)" $? "$WORK/logs/w2b.log"
+rm -f "$WP/src/_bad.gd" "$WP/src/_bad.gd.uid" "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"
+cp "$FIX/coro_unawaited.gd" "$WP/src/_coro.gd"; wimport
+timeout 60 "$GODOT_BIN" --headless --debug --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w3a.log" 2>&1
+wshow "W3 --debug gate, two coroutine calls without await, default settings" $? "$WORK/logs/w3a.log"
+cp "$WP/project.godot" "$WORK/w_project.orig"
+printf '\n[debug]\n\ngdscript/warnings/missing_await=1\n' >> "$WP/project.godot"
+timeout 60 "$GODOT_BIN" --headless --debug --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w3b.log" 2>&1
+wshow "W3 the same with debug/gdscript/warnings/missing_await=1" $? "$WORK/logs/w3b.log"
+cp "$WORK/w_project.orig" "$WP/project.godot"; rm -f "$WP/src/_coro.gd" "$WP/src/_coro.gd.uid"
+cp "$FIX/warn_cases.gd" "$WP/src/_warn.gd"
+printf '\n[debug]\n\ngdscript/warnings/unused_variable=2\n' >> "$WP/project.godot"; wimport
+timeout 60 "$GODOT_BIN" --headless --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w4.log" 2>&1
+printf '\n=== W4 normal gate, unused_variable set to error, script with an unused variable\n    exit=%s\n' $?
+tr -d '\r' < "$WORK/logs/w4.log" | grep -E '^PARSE-GATE|FAIL  ' | sed 's/^/    | /'
+cp "$WORK/w_project.orig" "$WP/project.godot"; rm -f "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"
+cp "$FIX/node_path_missing.gd" "$WP/tools/_trap.gd"
+printf '[gd_scene load_steps=2 format=3]\n\n[ext_resource type="Script" path="res://tools/_trap.gd" id="1"]\n\n[node name="Trap" type="Node"]\nscript = ExtResource("1")\n' > "$WP/tools/_trap.tscn"
+wimport
+timeout 60 "$GODOT_BIN" --headless --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w5a.log" 2>&1
+wshow "W5 parse gate, a script whose \$Hud the scene does not have" $? "$WORK/logs/w5a.log"
+timeout 60 "$GODOT_BIN" --headless --path "$WP" --quit-after 600 res://tools/_trap.tscn < /dev/null > "$WORK/logs/w5b.log" 2>&1
+wshow "W5 running that scene" $? "$WORK/logs/w5b.log"
+rm -f "$WP/tools/_trap.gd" "$WP/tools/_trap.gd.uid" "$WP/tools/_trap.tscn"
+cp "$FIX/warn_cases.gd" "$WP/src/_warn.gd"
+printf '\n[debug]\n\ngdscript/warnings/enable=false\n' >> "$WP/project.godot"; wimport
+timeout 60 "$GODOT_BIN" --headless --debug --path "$WP" res://tools/ci/parse_gate.tscn < /dev/null > "$WORK/logs/w6.log" 2>&1
+wshow "W6 --debug gate, six-warning script, debug/gdscript/warnings/enable=false" $? "$WORK/logs/w6.log"
+cp "$WORK/w_project.orig" "$WP/project.godot"; rm -f "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"; wimport
+
+WARN="$ROOT/skills/godot-headless-harness/warnings.sh"
+wcase() {  # wcase <label> [warnings.sh args]
+  local label="$1"; shift
+  GODOT_BIN="$GODOT_BIN" bash "$WARN" --path "$WP" "$@" > "$WORK/logs/warn.out" 2>&1
+  printf '\n=== KIT warnings.sh: %s\n    exit=%s\n' "$label" $?
+  grep -E '^  res://|^  note:|^GODOT-WARN' "$WORK/logs/warn.out" | sed 's/^ */    | /' | head -10
+}
+wcase "clean demo (expect CLEAN, missing_await note)"
+cp "$FIX/warn_cases.gd" "$WP/src/_warn.gd"; cp "$FIX/coro_unawaited.gd" "$WP/src/_coro.gd"
+wcase "warn_cases + coro_unawaited (expect FOUND 6, none for the coroutines)"
+wcase "only src/_coro.gd asked (expect CLEAN + note)" src/_coro.gd
+printf '\n[debug]\n\ngdscript/warnings/missing_await=1\n' >> "$WP/project.godot"
+wcase "missing_await=1, both files asked (expect FOUND 9)" res://src/_coro.gd res://src/_warn.gd
+cp "$WORK/w_project.orig" "$WP/project.godot"
+cp "$FIX/syntax_error.gd" "$WP/src/_bad.gd"
+s=$(date +%s)
+wcase "a syntax error in src/ (expect FAIL at once, no hang)"
+echo "    wall=$(( $(date +%s) - s ))s"
+rm -f "$WP/src/_bad.gd" "$WP/src/_bad.gd.uid" "$WP/src/_coro.gd" "$WP/src/_coro.gd.uid"
+printf '\n[debug]\n\ngdscript/warnings/enable=false\n' >> "$WP/project.godot"
+wcase "warnings switched off in project.godot (expect FAIL, not CLEAN)" --no-import
+cp "$WORK/w_project.orig" "$WP/project.godot"
+# The project in game/ of a repo: `git diff --name-only` paths are repo-relative (game/src/...). Run from the project.
+WR="$WORK/warn_repo"; rm -rf "$WR"; mkdir -p "$WR"; cp -r "$WP" "$WR/game"
+( cd "$WR/game" && GODOT_BIN="$GODOT_BIN" bash "$WARN" --path . --no-import game/src/_warn.gd > "$WORK/logs/warn.out" 2>&1 )
+printf '\n=== KIT warnings.sh: repo-root-relative path game/src/_warn.gd, run in game/ (expect FAIL, not CLEAN)\n    exit=%s\n' $?
+tail -1 "$WORK/logs/warn.out" | sed 's/^/    | /'
+( cd "$WR/game" && GODOT_BIN="$GODOT_BIN" bash "$WARN" --path . --no-import src/_warn.gd > "$WORK/logs/warn.out" 2>&1 )
+printf '\n=== KIT warnings.sh: the same file as src/_warn.gd (expect FOUND 6)\n    exit=%s\n' $?
+tail -1 "$WORK/logs/warn.out" | sed 's/^/    | /'
+rm -f "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"
+
 echo; echo "logs: $WORK/logs"

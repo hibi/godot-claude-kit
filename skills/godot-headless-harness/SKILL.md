@@ -51,8 +51,8 @@ These were measured on Godot 4.7.2 with the kit's `tests/measure_traps.sh`:
 
 - **`--import` does not parse scripts.** A hard syntax error, or `Vector2.ZERO.z`, passes it with exit 0 and no output.
 - **`--check-only --script <file>` lies the other way.** It does catch both errors. But it also fails every
-  *correct* script that names an autoload (`Identifier not found: GameState`), because a `--script` run has no
-  autoloads.
+  *correct* script that names an autoload (`Identifier not found: GameState`). The script handed to `--script` is
+  compiled before the project's autoload names exist; scenes loaded later in such a run do see them.
 - **In a scene the autoloads are live.** The gate loads every script fresh (`CACHE_MODE_IGNORE`) and requires it to
   instantiate. A syntax error then shows up as `FAIL res://... (does not compile)` with exit 1.
 - **The gate skips its own script.** Re-loading the running gate script with `CACHE_MODE_IGNORE` crashed the engine
@@ -103,7 +103,41 @@ Do the same for the parse gate: drop a file with a syntax error into a scanned d
 compile)`, then delete it. Keep fixtures that are broken on purpose outside the scanned directories (or in `SKIP`), and
 never leave one behind.
 
-## 5. Reporting
+## 5. GDScript warnings
+
+The gate answers "does it compile". The engine's GDScript warnings answer "does it do what it looks like": an unused
+variable, a shadowed one, integer division, a standalone expression, unreachable code. Measured on Godot 4.7.2:
+
+- **Without `--debug` the engine prints no warnings at all.** `--check-only` exits 0 silently, and the gate says PASS.
+- **With `--debug`, a script that does not parse stops at a `debug>` prompt.**
+  - On Windows the engine never exits, even with stdin closed; both `--check-only` and the gate hung.
+  - On Linux, with stdin closed, `--check-only` crashed (exit 132), and the gate went on and failed normally.
+- **An un-awaited call to a coroutine** (`slow()` where `slow` contains `await`) warns only when the project enables
+  `debug/gdscript/warnings/missing_await`, and that setting is **off** by default. Using such a call's return value
+  without `await` is a parse error, so the gate catches that case.
+
+`warnings.sh` handles all three:
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path .                          # whole project
+bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path . src/player.gd src/hud.gd  # only what you changed
+```
+
+1. It runs the gate normally.
+2. Only after a PASS does it run the gate again with `--debug`, under a wall-clock timeout.
+3. It prints each warning as `res://file.gd:LINE: message`, skipping `res://addons/`.
+4. If `missing_await` is off, it adds a note saying so. Un-awaited coroutine calls then have to be checked by hand.
+
+| Last line | Exit | Meaning |
+|---|---|---|
+| `GODOT-WARN: CLEAN (...)` | 0 | no warning in the files asked (or the whole project) |
+| `GODOT-WARN: FOUND n (...)` | 1 | n warnings, listed above it |
+| `GODOT-WARN: FAIL (why)` | 2 | could not check: no gate, the gate failed, or the `--debug` pass did not finish |
+| `GODOT-WARN: NO-ENGINE` | 3 | no binary |
+
+The project's own warning settings apply. A warning the project set to "error" fails the gate, like any parse error.
+
+## 6. Reporting
 
 When you report, include:
 

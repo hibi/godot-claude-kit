@@ -20,13 +20,13 @@ var _ran := 0
 var _failed := 0
 
 
-func _check(name: String, cond: bool, why := "") -> void:
+func _check(what: String, cond: bool, why := "") -> void:
 	_ran += 1
 	if cond:
-		print("  ok    %s" % name)
+		print("  ok    %s" % what)
 	else:
 		_failed += 1
-		print("  FAIL  %s (%s)" % [name, why])
+		print("  FAIL  %s (%s)" % [what, why])
 
 
 func _ready() -> void:

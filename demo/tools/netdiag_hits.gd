@@ -33,13 +33,13 @@ var _synced: Array[int] = []
 var _match: Node
 
 
-func _check(name: String, cond: bool, why := "") -> void:
+func _check(what: String, cond: bool, why := "") -> void:
 	_ran += 1
 	if cond:
-		print("  ok    %s" % name)
+		print("  ok    %s" % what)
 	else:
 		_failed += 1
-		print("  FAIL  %s (%s)" % [name, why])
+		print("  FAIL  %s (%s)" % [what, why])
 
 
 ## Polls cond every frame for at most `seconds`. A plain `await signal` would hang until ENet's own timeout.
