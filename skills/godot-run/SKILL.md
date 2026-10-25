@@ -66,6 +66,10 @@ The runner handles every step for you:
 each process with `--no-import`. Parallel imports would write the same `.godot/` cache at the same time. The
 `godot-multiplayer-harness` skill's `net_run.sh` does exactly this.
 
+**Keeping what the run wrote to `user://`:** `--home <dir>` uses that directory as the isolated APPDATA/HOME and does not
+delete it afterwards. Without it, the isolation directory is thrown away after the run. `godot-unit-tests` uses it to
+collect gdUnit4's reports.
+
 The runner prints the log path. Read the log whenever the verdict is not PASS. Pass `--allow-engine-errors` only when
 the project has known, unrelated `ERROR:` noise, and say so when you report.
 

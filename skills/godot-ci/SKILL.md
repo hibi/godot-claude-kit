@@ -1,6 +1,6 @@
 ---
 name: godot-ci
-description: One trustworthy verdict for a whole Godot 4 project - import, the parse gate, the static RPC check and every harness (single-process and multiplayer) in one command - and a GitHub Actions workflow that runs the same thing. Use before a commit or push, when asked to "run all checks", "run CI", "is the project green", or to set up CI / GitHub Actions for a Godot project. Runs through the godot-run skill's runner; the checks themselves come from the godot-headless-harness and godot-multiplayer-harness skills.
+description: One trustworthy verdict for a whole Godot 4 project - import, the parse gate, the static RPC check, every harness (single-process and multiplayer) and the GUT/gdUnit4 unit tests in one command - and a GitHub Actions workflow that runs the same thing. Use before a commit or push, when asked to "run all checks", "run CI", "is the project green", or to set up CI / GitHub Actions for a Godot project. Runs through the godot-run skill's runner; the checks themselves come from the godot-headless-harness, godot-multiplayer-harness and godot-unit-tests skills.
 ---
 
 # godot-ci
@@ -14,6 +14,11 @@ exit code, never the exit code alone):
 3. Every **diag harness** `diag_<name>.tscn`, one process each. It must print `DIAG-<NAME>: PASS`.
 4. Every **multiplayer harness** `netdiag_<name>.tscn`, run through `net_run.sh`: a server and a client, each judged.
    Both must print `NETDIAG-<NAME>-SERVER|CLIENT: PASS`.
+
+5. The **unit tests** (GUT or gdUnit4), through `test_run.sh` (skill `godot-unit-tests`). They run when a framework is
+   installed under `addons/` and the test directory is known: `--test-dir res://...`, or `"dirs"` in GUT's
+   `.gutconfig.json`. A framework without a known directory shows a visible `SKIP` row, and the PASS line says
+   `unit tests SKIPPED`.
 
 Harness discovery skips `.godot/`, `addons/` and directories with a `.gdignore`. Every run after the first reuses its
 import.
@@ -38,6 +43,8 @@ Other options:
 - `--gate <res path>`: a gate somewhere else.
 - `--frames N` / `--timeout S`: passed through to every run.
 - `--out <dir>`: where the per-run logs go. A fresh temp dir by default; the path is printed either way.
+- `--test-dir res://...` (repeatable), `--test-framework gut|gdunit` (when both are installed) and `--min-tests N`
+  (default 1) go to the unit-test run.
 - `--no-rpc-check`: skips the static RPC check. Use it only for a project the check misreads (it matches by name),
   and say so when you report. The multiplayer harnesses still run.
 
@@ -64,7 +71,7 @@ bash "${CLAUDE_SKILL_DIR}/ci.sh" --path game install --godot-version 4.7.2-stabl
 
 `install` never overwrites a file. It writes:
 
-- Copies of the scripts in `res://tools/ci/`: `ci.sh`, `godot_run.sh`, `net_run.sh` and `rpc_check.sh`. CI then does
+- Copies of the scripts in `res://tools/ci/`: `ci.sh`, `godot_run.sh`, `net_run.sh`, `rpc_check.sh` and `test_run.sh`. CI then does
   not need the plugin. `--dir` puts them elsewhere.
 - `.github/workflows/godot-ci.yml` at the **git repository root**. It works when the Godot project sits in a
   subdirectory of the repository.

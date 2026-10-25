@@ -14,6 +14,10 @@
 #   --frames N, --timeout S   passed to every run (see godot_run.sh)
 #   --out DIR             keep the per-run logs here (default: a fresh temp dir; printed either way)
 #   --no-rpc-check        skip the static RPC check (for a project it misreads - it works by name; say so when reporting)
+#   --test-dir RES        GUT / gdUnit4 test directory, repeatable (GUT: default "dirs" of res://.gutconfig.json);
+#                         --test-framework gut|gdunit when both are installed; --min-tests N (default 1). Unit tests
+#                         run through test_run.sh (skill godot-unit-tests) when a framework is installed under addons/;
+#                         with no known test directory the summary says SKIP, never PASS.
 #   install only:  --dir D (project-relative, default tools/ci), --godot-version V (e.g. 4.7.2-stable; default:
 #                  read from the engine in GODOT_BIN / PATH)
 #
@@ -30,11 +34,15 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 PROJECT="" GATE="res://tools/ci/parse_gate.tscn" MIN_H=0 OUT="" DIR="tools/ci" GVER="" RPC=1 RUNARGS=() ARGS=()
+TESTARGS=() TESTDIRS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="${2%/}"; shift 2 ;;
     --gate) GATE="$2"; shift 2 ;;
     --no-rpc-check) RPC=0; shift ;;
+    --test-dir) TESTARGS+=(--dir "$2"); TESTDIRS=1; shift 2 ;;
+    --test-framework) TESTARGS+=(--framework "$2"); shift 2 ;;
+    --min-tests) TESTARGS+=(--min-tests "$2"); shift 2 ;;
     --min-harnesses) MIN_H="$2"; shift 2 ;;
     --frames|--timeout) RUNARGS+=("$1" "$2"); shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
@@ -55,10 +63,13 @@ NETRUN="$HERE/net_run.sh"
 [ -f "$NETRUN" ] || NETRUN="$HERE/../godot-multiplayer-harness/net_run.sh"
 RPCCHECK="$HERE/rpc_check.sh"
 [ -f "$RPCCHECK" ] || RPCCHECK="$HERE/../godot-multiplayer-harness/rpc_check.sh"
+# GUT / gdUnit4 runner (skill godot-unit-tests), same lookup.
+TESTRUN="$HERE/test_run.sh"
+[ -f "$TESTRUN" ] || TESTRUN="$HERE/../godot-unit-tests/test_run.sh"
 
 if [ "${ARGS[0]:-}" = install ]; then
   dest="$PROJECT/$DIR"
-  for f in "$dest/ci.sh" "$dest/godot_run.sh" "$dest/net_run.sh" "$dest/rpc_check.sh"; do
+  for f in "$dest/ci.sh" "$dest/godot_run.sh" "$dest/net_run.sh" "$dest/rpc_check.sh" "$dest/test_run.sh"; do
     [ -e "$f" ] && { echo "install: $f already exists - not overwriting (delete it to update)"; exit 1; }
   done
   if [ -z "$GVER" ]; then
@@ -84,6 +95,7 @@ if [ "${ARGS[0]:-}" = install ]; then
   vendored="res://$DIR/ci.sh, res://$DIR/godot_run.sh"
   if [ -f "$NETRUN" ]; then cp "$NETRUN" "$dest/net_run.sh"; vendored="$vendored, res://$DIR/net_run.sh"; fi
   if [ -f "$RPCCHECK" ]; then cp "$RPCCHECK" "$dest/rpc_check.sh"; vendored="$vendored, res://$DIR/rpc_check.sh"; fi
+  if [ -f "$TESTRUN" ]; then cp "$TESTRUN" "$dest/test_run.sh"; vendored="$vendored, res://$DIR/test_run.sh"; fi
   sed -e "s|__GODOT_VERSION__|$GVER|g" -e "s|__PROJECT__|$rel|g" -e "s|__CI__|$rel/$DIR/ci.sh|g" \
     "$HERE/templates/godot-ci.yml" > "$wf"
   echo "wrote $vendored and $wf (Godot $GVER, project dir '$rel')"
@@ -171,6 +183,31 @@ for h in ${HARNESSES[@]+"${HARNESSES[@]}"}; do
   esac
 done
 
+# Unit tests (GUT / gdUnit4) when a framework is installed. Without a known test directory: a visible SKIP.
+UNIT="none"
+if [ -f "$PROJECT/addons/gut/gut_cmdln.gd" ] || [ -f "$PROJECT/addons/gdUnit4/bin/GdUnitCmdTool.gd" ]; then
+  gutdirs=0
+  [ -f "$PROJECT/.gutconfig.json" ] && tr -d '\r\n' < "$PROJECT/.gutconfig.json" | grep -q '"dirs"[[:space:]]*:[[:space:]]*\[[^]]*res://' \
+    && [ -f "$PROJECT/addons/gut/gut_cmdln.gd" ] && gutdirs=1
+  if [ ! -f "$TESTRUN" ]; then
+    RESULTS+=("SKIP  unit  tests (test_run.sh not found next to ci.sh or in ../godot-unit-tests/)"); UNIT="SKIPPED"
+  elif [ $TESTDIRS = 0 ] && [ $gutdirs = 0 ]; then
+    RESULTS+=("SKIP  unit  tests (a test framework is installed, but no test directory: pass --test-dir res://...)")
+    UNIT="SKIPPED"
+  else
+    n=$((n + 1))
+    echo "== unit tests"
+    bash "$TESTRUN" --path "$PROJECT" --out "$OUT/unit" ${IMPORT[@]+"${IMPORT[@]}"} ${TESTARGS[@]+"${TESTARGS[@]}"} \
+      > "$OUT/unit.out" 2>&1
+    rc=$?
+    sed 's/^/   /' "$OUT/unit.out"
+    [ $rc -eq 3 ] && { echo "GODOT-CI: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; }
+    verdict=$(tail -1 "$OUT/unit.out" | sed -E 's/^GODOT-TEST: (PASS|FAIL) //')
+    if [ $rc -eq 0 ]; then RESULTS+=("PASS  unit  $verdict"); UNIT="ok"
+    else RESULTS+=("FAIL  unit  $verdict"); failed+=("unit-tests"); UNIT="failed"; fi
+  fi
+fi
+
 echo "== summary (logs in $(show_path "$OUT"))"
 printf '   %s\n' "${RESULTS[@]}"
 nh=${#HARNESSES[@]}
@@ -181,5 +218,6 @@ if [ "$nh" -lt "$MIN_H" ]; then
 fi
 if [ -n "$why" ]; then echo "GODOT-CI: FAIL ($why)"; exit 1; fi
 rpcnote="rpc check"; { [ -f "$RPCCHECK" ] && [ "$RPC" = 1 ]; } || rpcnote="rpc check SKIPPED"
-echo "GODOT-CI: PASS (parse gate, $rpcnote, $nh/$nh harnesses: $nd diag, $nn net)"
+unitnote=""; [ "$UNIT" = ok ] && unitnote=", unit tests"; [ "$UNIT" = SKIPPED ] && unitnote=", unit tests SKIPPED"
+echo "GODOT-CI: PASS (parse gate, $rpcnote, $nh/$nh harnesses: $nd diag, $nn net$unitnote)"
 exit 0

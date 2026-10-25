@@ -15,6 +15,8 @@
 #                          imports would write the same .godot/ cache at once.
 #   --allow-engine-errors  report `ERROR:` lines instead of failing on them (SCRIPT ERROR / Parse Error always fail).
 #   --log FILE             where to keep the run log (default: a fresh temp dir; the path is printed either way).
+#   --home DIR             use DIR as the isolated APPDATA/HOME and KEEP it (default: a throwaway dir, deleted after
+#                          the run) - for a caller that needs what the run wrote to user://, e.g. test reports.
 #
 # Engine binary: $GODOT_BIN, else `godot` on PATH. Nothing is hard-coded.
 #
@@ -26,7 +28,7 @@
 #   GODOT-RUN: IMPORTED      0   --import-only: the import exited 0 (which says nothing about the scripts)
 set -u
 
-PROJECT="" BANNER="" FRAMES=3600 TIMEOUT_S=600 DO_IMPORT=1 IMPORT_ONLY=0 ALLOW_ERRORS=0 LOG=""
+PROJECT="" BANNER="" FRAMES=3600 TIMEOUT_S=600 DO_IMPORT=1 IMPORT_ONLY=0 ALLOW_ERRORS=0 LOG="" KEEP_HOME=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="$2"; shift 2 ;;
@@ -37,6 +39,7 @@ while [ $# -gt 0 ]; do
     --import-only) IMPORT_ONLY=1; shift ;;
     --allow-engine-errors) ALLOW_ERRORS=1; shift ;;
     --log) LOG="$2"; shift 2 ;;
+    --home) KEEP_HOME="$2"; shift 2 ;;
     --) shift; break ;;
     *) break ;;
   esac
@@ -53,11 +56,12 @@ fi
 # Isolation: every engine process - the import too - sees a throwaway APPDATA/HOME, so editor settings, recent-project
 # lists and user:// data of the real installation are never read or written. (--user-data-dir does not exist in 4.x.)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/godot_run.XXXXXX")
-mkdir -p "$WORK/home"
-export APPDATA="$WORK/home" LOCALAPPDATA="$WORK/home" HOME="$WORK/home" \
-  XDG_DATA_HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/home" XDG_CACHE_HOME="$WORK/home"
+H="${KEEP_HOME:-$WORK/home}"
+mkdir -p "$H"
+export APPDATA="$H" LOCALAPPDATA="$H" HOME="$H" XDG_DATA_HOME="$H" XDG_CONFIG_HOME="$H" XDG_CACHE_HOME="$H"
 [ -n "$LOG" ] || LOG="$WORK/run.log"
 IMPORT_LOG="$WORK/import.log"
+drop_home() { [ -n "$KEEP_HOME" ] || rm -rf "$WORK/home"; }
 show_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
 engine() {  # engine <logfile> <args...>
@@ -77,18 +81,18 @@ if [ "$DO_IMPORT" = 1 ] || [ "$IMPORT_ONLY" = 1 ]; then
   ie=$?
   if [ $ie -ne 0 ]; then
     echo "import:  exit $ie, log $(show_path "$IMPORT_LOG")"; tr -d '\r' < "$IMPORT_LOG" | tail -5
-    echo "GODOT-RUN: FAIL (--import exit $ie)"; rm -rf "$WORK/home"; exit 1
+    echo "GODOT-RUN: FAIL (--import exit $ie)"; drop_home; exit 1
   fi
 fi
 if [ "$IMPORT_ONLY" = 1 ]; then
-  rm -rf "$WORK/home"
+  drop_home
   echo "import:  exit 0, log $(show_path "$IMPORT_LOG")"
   echo "GODOT-RUN: IMPORTED"; exit 0
 fi
 
 engine "$LOG" --headless --path "$PROJECT" --quit-after "$FRAMES" "$@"
 code=$?
-rm -rf "$WORK/home"
+drop_home
 
 # The engine writes CRLF on Windows: strip CR before matching anything anchored at the line end.
 CLEAN="$WORK/run.clean.log"

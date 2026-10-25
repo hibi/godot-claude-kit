@@ -121,7 +121,9 @@ case "$GODOT_BIN" in *_console.exe)
   fi
   if [ -f "$GUI_EXE" ] && command -v powershell.exe >/dev/null; then
     ps_log="$WORK/logs/t9_gui_exe_ps.log"
-    powershell.exe -NoProfile -Command "\$exe='$(cygpath -w "$GUI_EXE")'; \$sw=[Diagnostics.Stopwatch]::StartNew(); & \$exe --headless --path '$(cygpath -w "$DEMO")' --quit-after 600 res://tools/diag_health.tscn *> '$(cygpath -w "$WORK/logs/t9_raw.log")'; \$ms=\$sw.ElapsedMilliseconds; \$still=@(Get-Process | Where-Object { \$_.Path -eq \$exe }).Count; \"returned_ms=\$ms exit='\$LASTEXITCODE' still_running=\$still\"; Get-Process | Where-Object { \$_.Path -eq \$exe } | Wait-Process" > "$ps_log" 2>&1
+    # Count and wait only for the engine THIS step started: other runs of the same exe (an editor, another project's
+    # tool) must neither inflate still_running nor make this step wait for them - it once waited on a foreign run.
+    powershell.exe -NoProfile -Command "\$exe='$(cygpath -w "$GUI_EXE")'; \$before=@(Get-Process | Where-Object { \$_.Path -eq \$exe } | ForEach-Object { \$_.Id }); \$sw=[Diagnostics.Stopwatch]::StartNew(); & \$exe --headless --path '$(cygpath -w "$DEMO")' --quit-after 600 res://tools/diag_health.tscn *> '$(cygpath -w "$WORK/logs/t9_raw.log")'; \$ms=\$sw.ElapsedMilliseconds; \$mine=@(Get-Process | Where-Object { \$_.Path -eq \$exe -and \$before -notcontains \$_.Id }); \"returned_ms=\$ms exit='\$LASTEXITCODE' still_running=\$(\$mine.Count)\"; \$mine | Wait-Process -Timeout 60 -ErrorAction SilentlyContinue" > "$ps_log" 2>&1
     printf '\n=== T9 GUI exe (%s) from PowerShell with &\n    %s\n    log bytes=%s\n' "${GUI_EXE##*/}" "$(tr -d '\r' < "$ps_log")" "$(wc -c < "$WORK/logs/t9_raw.log")"
   fi
 esac
@@ -368,5 +370,114 @@ printf '\n=== KIT godot_run.sh --import-only on a fresh copy (expect IMPORTED, .
 grep 'GODOT-RUN' "$WORK/logs/importonly.out" | sed 's/^/    | /'
 GODOT_BIN="$GODOT_BIN" bash "$ROOT/skills/godot-run/godot_run.sh" --path "$IO" --no-import --banner '^DIAG-HEALTH: PASS' \
   res://tools/diag_health.tscn 2>&1 | tail -1 | sed 's/^/    | then --no-import diag_health: /'
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Unit-test frameworks: GUT 9.7.1 and gdUnit4 6.2.2, pinned and verified by sha256, downloaded once into a cache next to
+# the work dir (they are not vendored into the kit). Without network or on a checksum mismatch this section says
+# SKIPPED - it never passes silently. U1-U10 run the frameworks' own CLIs; the KIT cases run test_run.sh.
+FWC="${TMPDIR:-${TEMP:-/tmp}}/gck_fw_cache"; mkdir -p "$FWC"
+fw_fetch() {  # fw_fetch <name> <url> <sha256> <addon dir in the archive> -> prints the addon path, or nothing
+  local z="$FWC/$1.zip" x="$FWC/$1"
+  [ -f "$z" ] || curl -sSfL -o "$z.part" "$2" 2>/dev/null && { [ -f "$z" ] || mv "$z.part" "$z"; }
+  [ -f "$z" ] || return 1
+  # sha256sum reads stdin: given a path with backslashes (TEMP on Windows) it escapes the name and prefixes the line
+  # with "\", which broke the comparison once.
+  [ "$(sha256sum < "$z" | cut -d' ' -f1)" = "$3" ] || { echo "    checksum mismatch: $z" >&2; return 1; }
+  if [ ! -d "$x/$4" ]; then
+    mkdir -p "$x"
+    if command -v unzip > /dev/null; then unzip -q -o "$z" -d "$x"; else python3 -m zipfile -e "$z" "$x"; fi
+  fi
+  [ -d "$x/$4" ] && echo "$x/$4"
+}
+GUT_ADDON=$(fw_fetch gut-9.7.1 https://github.com/bitwes/Gut/archive/refs/tags/v9.7.1.zip \
+  14969aa46adc84aa08cdd21b9f6d1a64addd92ae60b36f02d0521ed305aa4086 Gut-9.7.1/addons/gut)
+GDU_ADDON=$(fw_fetch gdunit4-6.2.2 https://github.com/godot-gdunit-labs/gdUnit4/archive/refs/tags/v6.2.2.zip \
+  ddb44730ffb9cd77fd70d283753450759b00c5016143d7572bf63625f64d5433 gdUnit4-6.2.2/addons/gdUnit4)
+TR="$ROOT/skills/godot-unit-tests/test_run.sh"
+ucopy() {  # ucopy <name> <gut|gdunit> [noimport]: demo copy + framework + its fixture test, imported unless noimport
+  local u="$WORK/$1"; cp -r "$DEMO" "$u"; rm -rf "$u/.godot"; mkdir -p "$u/addons" "$u/tests/$2"
+  if [ "$2" = gut ]; then cp -r "$GUT_ADDON" "$u/addons/gut"; cp "$ROOT/tests/fixtures/gut/test_health.gd" "$u/tests/gut/"
+  else cp -r "$GDU_ADDON" "$u/addons/gdUnit4"; cp "$ROOT/tests/fixtures/gdunit/test_health_suite.gd" "$u/tests/gdunit/"; fi
+  [ "${3:-}" = noimport ] || godot --headless --path "$u" --import > "$WORK/logs/$1_import.log" 2>&1
+}
+ushow() {  # ushow <label> <exit> <log>: the framework's own summary lines
+  printf '\n=== %s\n    exit=%s\n' "$1" "$2"
+  tr -d '\r' < "$3" | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'Parse Error|^ERROR: |Ignoring script|GUT ERROR|passed\.|All tests|failing tests|class_names|No test cases|Exit code|Overall Summary|Headless mode is not|debug>|Abnormal' \
+    | grep -vE 'Unreferenced static|RID allocations|PagedAllocator|leaked at exit' | sort -u | head -8 | sed 's/^/    | /'
+}
+gut_cli() {  # gut_cli <copy> <log> [args]
+  local u="$WORK/$1" l="$WORK/logs/$2"; shift 2
+  timeout 120 "$GODOT_BIN" --headless --path "$u" -s res://addons/gut/gut_cmdln.gd -gexit -gdisable_colors "$@" > "$l" 2>&1
+}
+gdu_cli() {  # gdu_cli <copy> <log> [args] - never -d (see U9)
+  local u="$WORK/$1" l="$WORK/logs/$2"; shift 2
+  timeout "${UTO:-120}" "$GODOT_BIN" --headless --path "$u" -s ${GDU_D:-} res://addons/gdUnit4/bin/GdUnitCmdTool.gd -c "$@" > "$l" 2>&1
+}
+if [ -z "$GUT_ADDON" ] || [ -z "$GDU_ADDON" ]; then
+  printf '\n=== U1-U10 + KIT test_run.sh: SKIPPED (GUT/gdUnit4 not downloaded: no network or checksum mismatch)\n'
+else
+  ucopy ug gut
+  gut_cli ug u1.log -gdir=res://tests/gut; ushow "U1 GUT clean demo tests (expect exit 0, 2/2)" $? "$WORK/logs/u1.log"
+  cp -r "$WORK/ug" "$WORK/ug2"; cp "$FIX/syntax_error.gd" "$WORK/ug2/tests/gut/test_broken.gd"
+  gut_cli ug2 u2.log -gdir=res://tests/gut; ushow "U2 GUT with a test file that does not parse" $? "$WORK/logs/u2.log"
+  cp -r "$WORK/ug" "$WORK/ug3"; printf 'extends Node\n\n\nfunc test_not_a_guttest() -> void:\n\tpass\n' > "$WORK/ug3/tests/gut/test_wrong_base.gd"
+  gut_cli ug3 u3.log -gdir=res://tests/gut; ushow "U3 GUT with a test file that does not extend GutTest" $? "$WORK/logs/u3.log"
+  gut_cli ug u4.log -gdir=res://tests/nothing_here; ushow "U4 GUT with a test directory that does not exist" $? "$WORK/logs/u4.log"
+  mkdir -p "$WORK/ug/tests/empty"
+  gut_cli ug u4b.log -gdir=res://tests/empty; ushow "U4b GUT with an empty test directory" $? "$WORK/logs/u4b.log"
+  cp -r "$WORK/ug" "$WORK/ug4c"; mv "$WORK/ug4c/tests/gut/test_health.gd" "$WORK/ug4c/tests/gut/health_test.gd"
+  gut_cli ug4c u4c.log -gdir=res://tests/gut; ushow "U4c GUT, test file without the test_ prefix" $? "$WORK/logs/u4c.log"
+  ucopy ug5 gut noimport
+  gut_cli ug5 u5.log -gdir=res://tests/gut; ushow "U5 GUT on a fresh clone without --import" $? "$WORK/logs/u5.log"
+  cp -r "$WORK/ug" "$WORK/ug6"
+  printf 'extends GutTest\n\n\nfunc test_expects_push_error() -> void:\n\tpush_error("expected failure path")\n\tassert_push_error("expected failure path")\n' \
+    > "$WORK/ug6/tests/gut/test_expect_error.gd"
+  gut_cli ug6 u6.log -gdir=res://tests/gut; ushow "U6 GUT, a PASSING test that expects push_error (expect an ERROR: line anyway)" $? "$WORK/logs/u6.log"
+  ucopy ud gdunit
+  gdu_cli ud u7.log -a res://tests/gdunit; ushow "U7 gdUnit4 headless WITHOUT --ignoreHeadlessMode" $? "$WORK/logs/u7.log"
+  gdu_cli ud u8.log -a res://tests/nothing_here --ignoreHeadlessMode; ushow "U8 gdUnit4 with a test directory that does not exist" $? "$WORK/logs/u8.log"
+  mkdir -p "$WORK/ud/tests/empty"
+  gdu_cli ud u8b.log -a res://tests/empty --ignoreHeadlessMode; ushow "U8b gdUnit4 with an empty test directory" $? "$WORK/logs/u8b.log"
+  cp -r "$WORK/ud" "$WORK/ud9"; cp "$FIX/syntax_error.gd" "$WORK/ud9/tests/gdunit/test_broken_suite.gd"
+  UTO=20 GDU_D=-d gdu_cli ud9 u9.log -a res://tests/gdunit --ignoreHeadlessMode
+  ushow "U9 gdUnit4 with -d and a test file that does not parse (timeout 20 s)" $? "$WORK/logs/u9.log"
+  gdu_cli ud9 u9b.log -a res://tests/gdunit --ignoreHeadlessMode; ushow "U9b the same without -d" $? "$WORK/logs/u9b.log"
+  cp -r "$WORK/ud" "$WORK/ud10"; rm -rf "$WORK/ud10/reports"
+  gdu_cli ud10 u10.log -a res://tests/gdunit --ignoreHeadlessMode
+  printf '\n=== U10 gdUnit4 default run: files it wrote into the project\n    exit=%s, reports/ files=%s\n' $? \
+    "$(find "$WORK/ud10/reports" -type f 2>/dev/null | wc -l | tr -d ' ')"
+
+  tcase() {  # tcase <label> <copy> [test_run.sh args]
+    local label="$1" u="$WORK/$2"; shift 2
+    GODOT_BIN="$GODOT_BIN" bash "$TR" --path "$u" "$@" > "$WORK/logs/test_run.out" 2>&1
+    printf '\n=== KIT test_run.sh: %s\n    exit=%s\n' "$label" $?
+    tail -1 "$WORK/logs/test_run.out" | sed 's/^/    | /'
+  }
+  tcase "GUT clean (expect PASS 2)" ug --no-import --dir res://tests/gut
+  tcase "GUT, test file does not parse (expect FAIL)" ug2 --no-import --dir res://tests/gut
+  tcase "GUT, test file does not extend GutTest (expect FAIL)" ug3 --no-import --dir res://tests/gut
+  tcase "GUT, missing test directory (expect FAIL)" ug --no-import --dir res://tests/nothing_here
+  cp -r "$WORK/ug" "$WORK/ug7"; cp "$FIX/health_no_clamp.gd" "$WORK/ug7/src/health.gd"
+  tcase "GUT, Health clamp removed (expect FAIL, 1 failing)" ug7 --no-import --dir res://tests/gut
+  tcase "GUT, passing test expecting push_error (expect PASS 3)" ug6 --no-import --dir res://tests/gut
+  tcase "GUT, fresh clone - test_run.sh imports (expect PASS 2)" ug5 --dir res://tests/gut
+  tcase "GUT, --min-tests 3 with 2 tests (expect FAIL)" ug --no-import --dir res://tests/gut --min-tests 3
+  tcase "gdUnit4 clean (expect PASS 2)" ud --no-import --dir res://tests/gdunit
+  cp -r "$WORK/ud" "$WORK/ud11"; cp "$FIX/health_no_clamp.gd" "$WORK/ud11/src/health.gd"
+  tcase "gdUnit4, Health clamp removed (expect FAIL, 1 failing)" ud11 --no-import --dir res://tests/gdunit
+  tcase "gdUnit4, test file does not parse (expect FAIL)" ud9 --no-import --dir res://tests/gdunit
+  mkdir -p "$WORK/ud/tests/empty"
+  tcase "gdUnit4, empty test directory (expect FAIL)" ud --no-import --dir res://tests/empty
+  cp -r "$WORK/ud" "$WORK/ud12"; rm -rf "$WORK/ud12/reports"
+  printf 'extends GdUnitTestSuite\n\n\nfunc test_leaks_a_node() -> void:\n\tvar n := Node.new()\n\tassert_bool(n != null).is_true()\n' \
+    > "$WORK/ud12/tests/gdunit/test_orphan_suite.gd"
+  ( cd "$WORK/ud12" && find . -path ./.godot -prune -o -type f -print | sort ) > "$WORK/ud12.files_before"
+  tcase "gdUnit4, orphan node = exit 101 (expect PASS with a warnings note)" ud12 --no-import --dir res://tests/gdunit
+  tcase "the same with --strict (expect FAIL)" ud12 --no-import --dir res://tests/gdunit --strict
+  # A full file diff, not a reports/ count: on Linux gdUnit4 once wrote into <project>/tmp/... (it maps "/..." to res://).
+  ( cd "$WORK/ud12" && find . -path ./.godot -prune -o -type f -print | sort ) > "$WORK/ud12.files_after"
+  printf '    (project files added or removed by these two test_run.sh runs: %s - expect 0)\n' \
+    "$(diff "$WORK/ud12.files_before" "$WORK/ud12.files_after" | grep -c '^[<>]')"
+fi
 
 echo; echo "logs: $WORK/logs"

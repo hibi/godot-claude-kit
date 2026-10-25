@@ -30,6 +30,14 @@ Multiplayer is worse. Both of these leave server and client exiting 0:
 
 A client waiting for a server that is not there gives up after ~31 s.
 
+Unit-test frameworks are not immune either. Measured with GUT 9.7.1:
+
+- A test file that does not parse is silently dropped, and the run ends `All tests passed!` with exit 0.
+- An empty or missing test directory ends `Nothing was run.` with exit 0.
+
+gdUnit4 6.2.2 exits 0 on `No test cases found`. With `-d` and a broken test file it hangs forever at a `debug>` prompt
+on Windows, and on Linux it prints `Abnormal exit with 105` but exits 0.
+
 This kit teaches Claude to get a verdict it can trust. Every claim in the skills is reproduced on a small demo project
 by [`tests/measure_traps.sh`](tests/measure_traps.sh). If a claim does not reproduce, it is not in the kit.
 
@@ -40,10 +48,12 @@ by [`tests/measure_traps.sh`](tests/measure_traps.sh). If a claim does not repro
 | **`godot-run`** | A runner (`godot_run.sh`). It finds the engine and isolates the run from your editor settings and `user://` data. It imports when needed, always has a `--quit-after` and wall-clock backstop, and judges the log: `PASS` / `FAIL (reasons)` / `UNVERIFIED` / `NO-ENGINE`. It also covers the Windows PowerShell pitfalls (a GUI build that returns instantly, UTF-16 logs). |
 | **`godot-headless-harness`** | A **parse gate** scene that checks every GDScript compiles, with autoloads live. A **diag harness** template that drives your real scenes and autoloads, with coverage counting, so an un-awaited check cannot pass silently. A scaffold script, and the rule that every new check must be seen failing before it counts. |
 | **`godot-multiplayer-harness`** | A real headless **server and client(s) as separate engine processes**, started by `net_run.sh`, which judges every process's log and passes only when all of them pass. A harness template: one scene for both roles, a short timeout on every network wait, a "client done" handshake, loopback-only binding. A static **RPC check** that every RPC the project sends lands on an `@rpc` function. |
-| **`godot-ci`** | One command for the whole project: import, the parse gate, the RPC check, then every `diag_*` and `netdiag_*` harness, with one verdict. `install` writes a GitHub Actions workflow that runs the same script on Linux. |
+| **`godot-unit-tests`** | Runs your **GUT or gdUnit4** tests through the runner with the flags that avoid their traps. It judges them by the framework's exit code, its **JUnit XML** (fresh every run, a missing one is a FAIL) and the lines where they exit 0 without testing: a dropped test file, nothing run, no test cases. A `--min-tests` floor counts tests that *passed*. Reports never land in your project. |
+| **`godot-ci`** | One command for the whole project: import, the parse gate, the RPC check, every `diag_*` and `netdiag_*` harness, and the unit tests, with one verdict. `install` writes a GitHub Actions workflow that runs the same script on Linux. |
 
 The skills trigger on their own. Ask Claude to "check that everything still compiles", "verify the damage fix",
-"test the multiplayer hit sync" or "set up CI for this Godot project", and it picks the right one.
+"test the multiplayer hit sync", "run the unit tests" or "set up CI for this Godot project", and it picks the right
+one.
 
 ## Install
 
@@ -55,8 +65,8 @@ In Claude Code:
 ```
 
 The skills are then available as `/godot-kit:godot-run`, `/godot-kit:godot-headless-harness`,
-`/godot-kit:godot-multiplayer-harness` and `/godot-kit:godot-ci`. Claude also loads them by itself when a task needs
-them.
+`/godot-kit:godot-multiplayer-harness`, `/godot-kit:godot-unit-tests` and `/godot-kit:godot-ci`. Claude also loads
+them by itself when a task needs them.
 
 **Requirements:**
 
@@ -96,8 +106,8 @@ It answers a different question: *did that run really prove what the agent claim
 
 | Platform | Engine | What ran |
 |---|---|---|
-| Windows 10, Git Bash and PowerShell 5.1 | 4.7.2 stable | `measure_traps.sh`: every trap above, the multiplayer traps, and each sabotage case of the runner, gate, harnesses, `net_run.sh`, `rpc_check.sh` and `ci.sh` |
-| Linux (Debian, WSL2) | 4.7.2 stable, official Linux build | `measure_traps.sh`, the same set (the Windows-only PowerShell traps skip themselves), and the generated workflow's steps executed verbatim |
+| Windows 10, Git Bash and PowerShell 5.1 | 4.7.2 stable, GUT 9.7.1, gdUnit4 6.2.2 | `measure_traps.sh`: every trap above, the multiplayer and test-framework traps, and each sabotage case of the runner, gate, harnesses, `net_run.sh`, `rpc_check.sh`, `test_run.sh` and `ci.sh` |
+| Linux (Debian, WSL2) | 4.7.2 stable (official Linux build), GUT 9.7.1, gdUnit4 6.2.2 | `measure_traps.sh`, the same set (the Windows-only PowerShell traps skip themselves), and the generated workflow's steps executed verbatim |
 | GitHub Actions, `ubuntu-latest` | 4.7.2 stable | the kit's own workflow: `ci.sh` on the demo, on every push |
 
 The skills were also tested by a fresh Claude Code session with only the plugin loaded and a plain prompt. The skills
@@ -111,15 +121,16 @@ file).
 skills/godot-run/      runner + skill
 skills/godot-headless-harness/   parse gate + harness templates, scaffold script
 skills/godot-multiplayer-harness/   net_run.sh, rpc_check.sh, netdiag template, scaffold script
+skills/godot-unit-tests/   test_run.sh (GUT / gdUnit4)
 skills/godot-ci/       ci.sh, GitHub Actions template
 demo/                  small Godot 4 project every claim is measured on
-tests/measure_traps.sh reproduces every trap; tests/sabotage/ holds the broken-on-purpose fixtures
+tests/measure_traps.sh reproduces every trap; tests/sabotage/ holds the broken-on-purpose fixtures,
+                       tests/fixtures/ the GUT / gdUnit4 tests it runs (the frameworks are downloaded, pinned by sha256)
 ```
 
 ## Roadmap
 
 - Screenshot and visual checks.
-- A test runner for GUT / gdUnit4.
 - A GDScript reviewer agent.
 
 ## License
