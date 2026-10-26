@@ -78,7 +78,7 @@ start server server
 for i in $(seq 1 "$CLIENTS"); do start "client$i" client --client="$i"; done
 
 failed=() noengine=0
-for k in "${!PIDS[@]}"; do
+for ((k = 0; k < ${#PIDS[@]}; k++)); do
   wait "${PIDS[$k]}"; rc=$?
   tag="${TAGS[$k]}"
   echo "== $tag"

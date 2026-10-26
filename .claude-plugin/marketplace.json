@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "godot-kit",
-      "source": "./",
+      "source": "./godot-kit",
       "description": "Verdicts an agent loop can trust: skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
       "category": "development"
     }

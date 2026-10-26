@@ -81,7 +81,7 @@ A drawing run can still hand you a perfectly valid PNG of nothing, with exit 0:
 - Shoot a scene whose script does not parse and you get a plausible HUD over an empty world.
 
 This kit teaches Claude to get a verdict it can trust. Every claim in the skills is reproduced on a small demo project
-by [`tests/measure_traps.sh`](tests/measure_traps.sh). If a claim does not reproduce, it is not in the kit.
+by [`tests/measure_traps.sh`](https://github.com/hibi/godot-claude-kit/blob/master/tests/measure_traps.sh). If a claim does not reproduce, it is not in the kit.
 
 ## What's inside
 
@@ -123,7 +123,7 @@ The skills are then available as `/godot-kit:godot-run`, `/godot-kit:godot-headl
 
 ## What it runs, writes and fetches
 
-**Runs.** The skills are bash scripts, readable in `skills/`. They run on your machine when Claude follows a skill:
+**Runs.** The skills are bash scripts, readable in the plugin's `skills/` folder. They run on your machine when Claude follows a skill:
 
 - The Godot binary you point them at. Nothing is installed with the plugin, and the plugin never downloads an engine.
 - Standard tools: `grep`, `sed`, `awk`, `find`, coreutils `timeout`, `mktemp`.
@@ -172,9 +172,9 @@ Or by hand, without Claude, from your project directory. This route needs a clon
 
 ```bash
 KIT=~/godot-claude-kit    # where you cloned it
-bash "$KIT/skills/godot-headless-harness/scaffold.sh" --path . gate
-bash "$KIT/skills/godot-run/godot_run.sh" --path . --banner '^PARSE-GATE: PASS' res://tools/ci/parse_gate.tscn
-bash "$KIT/skills/godot-ci/ci.sh" --path .
+bash "$KIT/godot-kit/skills/godot-headless-harness/scaffold.sh" --path . gate
+bash "$KIT/godot-kit/skills/godot-run/godot_run.sh" --path . --banner '^PARSE-GATE: PASS' res://tools/ci/parse_gate.tscn
+bash "$KIT/godot-kit/skills/godot-ci/ci.sh" --path .
 ```
 
 ## Works with MCP servers
@@ -197,14 +197,17 @@ file).
 ## Repository layout
 
 ```
-.claude-plugin/        plugin + marketplace manifests
-skills/godot-run/      runner + skill
-skills/godot-headless-harness/   parse gate + harness templates, scaffold script
-skills/godot-multiplayer-harness/   net_run.sh, rpc_check.sh, netdiag template, scaffold script
-skills/godot-unit-tests/   test_run.sh (GUT / gdUnit4)
-skills/godot-screenshot/   shot.sh + its capture script (PNG, blank-frame check, golden compare)
-skills/godot-ci/       ci.sh, GitHub Actions template
-agents/gdscript-reviewer.md   the read-only review agent
+.claude-plugin/marketplace.json   the marketplace; its one plugin is godot-kit/
+godot-kit/             the plugin - the only folder Claude Code installs:
+  .claude-plugin/      plugin manifest + icon
+  skills/godot-run/    runner + skill
+  skills/godot-headless-harness/   parse gate + harness templates, scaffold script
+  skills/godot-multiplayer-harness/   net_run.sh, rpc_check.sh, netdiag template, scaffold script
+  skills/godot-unit-tests/   test_run.sh (GUT / gdUnit4)
+  skills/godot-screenshot/   shot.sh + its capture script (PNG, blank-frame check, golden compare)
+  skills/godot-ci/     ci.sh, GitHub Actions template
+  agents/gdscript-reviewer.md   the read-only review agent
+  README.md, LICENSE   copies of the ones at the repository root
 demo/                  small Godot 4 project every claim is measured on
 tests/measure_traps.sh reproduces every trap; tests/sabotage/ holds the broken-on-purpose fixtures,
                        tests/fixtures/ the GUT / gdUnit4 tests it runs (framework zips you supply, pinned by sha256)

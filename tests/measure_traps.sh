@@ -178,12 +178,16 @@ printf '\n=== T12 engine dirs under the redirect (expect both inside %s)\n' "$WO
 tr -d '\r' < "$WORK/logs/t12_dirs.log" | grep '=' | sed 's/^/    | /'
 
 # Kit consistency: the demo's gate is the skill template, differing only in its MIN_SCRIPTS floor.
-tpl="$ROOT/skills/godot-headless-harness/templates/parse_gate.gd"
+tpl="$ROOT/godot-kit/skills/godot-headless-harness/templates/parse_gate.gd"
 printf '\n=== KIT demo gate vs skill template (ignoring MIN_SCRIPTS): %s\n' \
   "$(diff <(grep -v '^const MIN_SCRIPTS' "$tpl") <(grep -v '^const MIN_SCRIPTS' "$DEMO/tools/ci/parse_gate.gd") > /dev/null && echo "in sync" || echo "DIFFERENT")"
+# The plugin folder carries copies of the root README and LICENSE (the directory lists the plugin's own README).
+for f in README.md LICENSE; do
+  printf '=== KIT godot-kit/%s vs the root copy: %s\n' "$f" "$(cmp -s "$ROOT/$f" "$ROOT/godot-kit/$f" && echo "in sync" || echo "DIFFERENT")"
+done
 
 # Kit: scaffold into a demo copy without tools/ and check what the skill promises, in both directions.
-SK="$ROOT/skills/godot-headless-harness/scaffold.sh"; K="$WORK/kit"
+SK="$ROOT/godot-kit/skills/godot-headless-harness/scaffold.sh"; K="$WORK/kit"
 rm -rf "$K"; cp -r "$DEMO" "$K"; rm -rf "$K/.godot" "$K/tools"
 bash "$SK" --path "$K" gate > /dev/null; bash "$SK" --path "$K" harness probe > /dev/null
 godot --headless --path "$K" --import > "$WORK/logs/kit_import.log" 2>&1
@@ -208,7 +212,7 @@ kit_run "gate with a broken script in src/ (expect FAIL)" res://tools/ci/parse_g
 
 # Kit: godot-ci on fresh demo copies (no .godot/), one sabotage at a time. A verdict that ignores a failed run once
 # slipped through here (rc read after another command), so every direction is checked on every measurement.
-CI="$ROOT/skills/godot-ci/ci.sh"; C="$WORK/ci"
+CI="$ROOT/godot-kit/skills/godot-ci/ci.sh"; C="$WORK/ci"
 ci_case() {  # ci_case <label> <setup command, run inside the copy> [ci.sh args...]
   local label="$1" setup="$2"; shift 2
   rm -rf "$C"; cp -r "$DEMO" "$C"; rm -rf "$C/.godot"
@@ -308,7 +312,7 @@ show "N8 parse gate with a script calling .rpc() on a non-@rpc function and rpc_
   "$WORK/logs/n_gate.log"
 rm -f "$NETC/src/_sabotage.gd"
 
-NET="$ROOT/skills/godot-multiplayer-harness/net_run.sh"
+NET="$ROOT/godot-kit/skills/godot-multiplayer-harness/net_run.sh"
 net_case() {  # net_case <label> [net_run.sh args...] - runs the demo harness, prints per-role verdicts
   local label="$1"; shift
   local t; t=$(now_ms)
@@ -344,7 +348,7 @@ cmp -s "$H" "$WORK/netdiag_hits.orig" && cmp -s "$M" "$WORK/net_match.orig" && e
 
 # Kit: the multiplayer scaffold - a fresh harness FAILS on both sides; with the placeholders gone the template's own
 # skeleton (listen, connect, done handshake) PASSES, with one client and with three.
-NS="$ROOT/skills/godot-multiplayer-harness/scaffold.sh"
+NS="$ROOT/godot-kit/skills/godot-multiplayer-harness/scaffold.sh"
 bash "$NS" --path "$NETC" probe > /dev/null
 nscaffold() {  # nscaffold <label> [net_run.sh args...]
   local label="$1"; shift
@@ -359,7 +363,7 @@ nscaffold "placeholders removed, template skeleton only (expect PASS)" --no-impo
 nscaffold "the same with --clients 3 (expect PASS, server + 3 clients)" --no-import --clients 3 --port $((NP + 22))
 
 # Kit: the static RPC check - clean demo, the sync_hp sabotage, and the edge-case fixture (exactly 3 BAD lines).
-RC="$ROOT/skills/godot-multiplayer-harness/rpc_check.sh"
+RC="$ROOT/godot-kit/skills/godot-multiplayer-harness/rpc_check.sh"
 rc_case() {  # rc_case <label> <project>
   bash "$RC" --path "$2" > "$WORK/logs/rpc_check.out" 2>&1
   printf '\n=== KIT rpc_check.sh: %s\n    exit=%s\n' "$1" $?
@@ -377,11 +381,11 @@ rm -rf "$NETC/src/_rpc_cases.gd" "$NETC/addons/thirdparty"
 
 # Kit: runner --import-only on a fresh copy, then a --no-import run must find the cache.
 IO="$WORK/importonly"; rm -rf "$IO"; cp -r "$DEMO" "$IO"; rm -rf "$IO/.godot"
-GODOT_BIN="$GODOT_BIN" bash "$ROOT/skills/godot-run/godot_run.sh" --path "$IO" --import-only > "$WORK/logs/importonly.out" 2>&1
+GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$IO" --import-only > "$WORK/logs/importonly.out" 2>&1
 printf '\n=== KIT godot_run.sh --import-only on a fresh copy (expect IMPORTED, .godot/ created)\n    exit=%s, .godot exists=%s\n' \
   $? "$([ -d "$IO/.godot" ] && echo yes || echo no)"
 grep 'GODOT-RUN' "$WORK/logs/importonly.out" | sed 's/^/    | /'
-GODOT_BIN="$GODOT_BIN" bash "$ROOT/skills/godot-run/godot_run.sh" --path "$IO" --no-import --banner '^DIAG-HEALTH: PASS' \
+GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$IO" --no-import --banner '^DIAG-HEALTH: PASS' \
   res://tools/diag_health.tscn 2>&1 | tail -1 | sed 's/^/    | then --no-import diag_health: /'
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -406,7 +410,7 @@ GUT_ADDON=$(fw_fetch gut-9.7.1 https://github.com/bitwes/Gut/archive/refs/tags/v
   14969aa46adc84aa08cdd21b9f6d1a64addd92ae60b36f02d0521ed305aa4086 Gut-9.7.1/addons/gut)
 GDU_ADDON=$(fw_fetch gdunit4-6.2.2 https://github.com/godot-gdunit-labs/gdUnit4/archive/refs/tags/v6.2.2.zip \
   ddb44730ffb9cd77fd70d283753450759b00c5016143d7572bf63625f64d5433 gdUnit4-6.2.2/addons/gdUnit4)
-TR="$ROOT/skills/godot-unit-tests/test_run.sh"
+TR="$ROOT/godot-kit/skills/godot-unit-tests/test_run.sh"
 ucopy() {  # ucopy <name> <gut|gdunit> [noimport]: demo copy + framework + its fixture test, imported unless noimport
   local u="$WORK/$1"; cp -r "$DEMO" "$u"; rm -rf "$u/.godot"; mkdir -p "$u/addons" "$u/tests/$2"
   if [ "$2" = gut ]; then cp -r "$GUT_ADDON" "$u/addons/gut"; cp "$ROOT/tests/fixtures/gut/test_health.gd" "$u/tests/gut/"
@@ -573,7 +577,7 @@ else
   printf '\n=== S4-S7, S9: SKIPPED (no display and no xvfb-run)\n'
 fi
 
-SHOT="$ROOT/skills/godot-screenshot/shot.sh"; CIS="$WORK/logs/ci_shot.out"
+SHOT="$ROOT/godot-kit/skills/godot-screenshot/shot.sh"; CIS="$WORK/logs/ci_shot.out"
 shcase() {  # shcase <label> [shot.sh args]
   local label="$1"; shift
   GODOT_BIN="$GODOT_BIN" bash "$SHOT" --path "$SP" --no-import "$@" > "$WORK/logs/shot.out" 2>&1
@@ -709,7 +713,7 @@ timeout 60 "$GODOT_BIN" --headless --debug --path "$WP" res://tools/ci/parse_gat
 wshow "W6 --debug gate, six-warning script, debug/gdscript/warnings/enable=false" $? "$WORK/logs/w6.log"
 cp "$WORK/w_project.orig" "$WP/project.godot"; rm -f "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"; wimport
 
-WARN="$ROOT/skills/godot-headless-harness/warnings.sh"
+WARN="$ROOT/godot-kit/skills/godot-headless-harness/warnings.sh"
 wcase() {  # wcase <label> [warnings.sh args]
   local label="$1"; shift
   GODOT_BIN="$GODOT_BIN" bash "$WARN" --path "$WP" "$@" > "$WORK/logs/warn.out" 2>&1
@@ -743,7 +747,7 @@ rm -f "$WP/src/_warn.gd" "$WP/src/_warn.gd.uid"
 
 # Kit: gate.sh - the project's gate scene when it has one, else parse_gate_script.gd from the skill as --script.
 # GN is a demo copy WITHOUT tools/ (no gate scene, nothing of the kit in it); its scripts name the GameState autoload.
-GATESH="$ROOT/skills/godot-headless-harness/gate.sh"; GN="$WORK/gate_none"
+GATESH="$ROOT/godot-kit/skills/godot-headless-harness/gate.sh"; GN="$WORK/gate_none"
 rm -rf "$GN"; cp -r "$DEMO" "$GN"; rm -rf "$GN/.godot" "$GN/tools"
 gcase() {  # gcase <label> <project> [gate.sh args]
   local label="$1" p="$2"; shift 2

@@ -1,4 +1,4 @@
-# The kit tests itself: the same ci.sh users get, run on the demo project (generated from skills/godot-ci/templates).
+# The kit tests itself: the same ci.sh users get, run on the demo project (generated from godot-kit/skills/godot-ci/templates).
 name: godot-ci
 
 on:
@@ -33,7 +33,7 @@ jobs:
       # look at it, and if it is right, commit it over demo/tests/shots/.
       - name: Import, parse gate, harnesses, screenshots
         run: |
-          bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --shot-dir res://tests/shots --require-shots \
+          bash "godot-kit/skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --shot-dir res://tests/shots --require-shots \
             --candidates "$RUNNER_TEMP/godot-ci-logs/candidates" --out "$RUNNER_TEMP/godot-ci-logs"
 
       - name: Keep the logs
