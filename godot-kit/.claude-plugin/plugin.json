@@ -8,6 +8,8 @@
   },
   "homepage": "https://github.com/hibi/godot-claude-kit",
   "repository": "https://github.com/hibi/godot-claude-kit",
+  "documentationUrl": "https://github.com/hibi/godot-claude-kit#readme",
+  "supportUrl": "https://github.com/hibi/godot-claude-kit/issues",
   "license": "MIT",
   "keywords": ["godot", "godot4", "gdscript", "gamedev", "testing", "headless", "ci", "multiplayer", "enet", "rpc", "gut", "gdunit4", "unit-testing", "screenshot", "visual-regression", "agent-loop", "autonomous-agents", "code-review"]
 }
