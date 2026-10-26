@@ -1,6 +1,6 @@
 {
   "name": "godot-kit",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Verdicts an agent loop can trust: skills that make Claude actually run, test and verify a Godot 4 project instead of trusting exit codes.",
   "author": {
     "name": "Jakub Hübner",
