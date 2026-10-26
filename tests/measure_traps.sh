@@ -83,6 +83,12 @@ for f in unawaited_slow unawaited_slow_counted; do
   godot --headless --path "$DEMO" --quit-after 600 res://tools/_trap.tscn > "$WORK/logs/t16_$f.log" 2>&1
   show "T16 un-awaited slow check, $f" $? "$WORK/logs/t16_$f.log"
 done
+
+# T17 - a lambda captures a local BY VALUE: a counter set in a signal lambda, and a local reassigned after the lambda.
+cp "$FIX/lambda_capture.gd" "$DEMO/tools/_trap.gd"; import
+godot --headless --path "$DEMO" --quit-after 600 res://tools/_trap.tscn > "$WORK/logs/t17_lambda.log" 2>&1
+show "T17 harness reading locals through lambdas" $? "$WORK/logs/t17_lambda.log"
+tr -d '\r' < "$WORK/logs/t17_lambda.log" | grep '^TRAP:' | sed 's/^/    | /'
 cleanup; import
 
 # T15 - does the example harness bite? Break the code under test (Health.damage stops clamping), then restore it.
@@ -724,6 +730,9 @@ wcase "clean demo (expect CLEAN, missing_await note)"
 cp "$FIX/warn_cases.gd" "$WP/src/_warn.gd"; cp "$FIX/coro_unawaited.gd" "$WP/src/_coro.gd"
 wcase "warn_cases + coro_unawaited (expect FOUND 6, none for the coroutines)"
 wcase "only src/_coro.gd asked (expect CLEAN + note)" src/_coro.gd
+cp "$FIX/lambda_capture.gd" "$WP/src/_lambda.gd"
+wcase "lambda_capture (expect FOUND 1: the counter the lambda assigns, nothing for the reassigned aim)" src/_lambda.gd
+rm -f "$WP/src/_lambda.gd" "$WP/src/_lambda.gd.uid"
 printf '\n[debug]\n\ngdscript/warnings/missing_await=1\n' >> "$WP/project.godot"
 wcase "missing_await=1, both files asked (expect FOUND 9)" res://src/_coro.gd res://src/_warn.gd
 cp "$WORK/w_project.orig" "$WP/project.godot"

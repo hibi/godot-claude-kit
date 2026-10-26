@@ -29,6 +29,8 @@ var port := 0
 var clients := 1
 var _ran := 0
 var _failed := 0
+# Members, not locals: the signal lambdas below set them. A lambda captures a LOCAL by value, so `lost = true` on a
+# local would change only the lambda's copy.
 var _done := 0       # server: clients that reported done
 var _lost := false   # client: connection failed or the server went away
 

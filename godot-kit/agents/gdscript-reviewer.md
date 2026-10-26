@@ -76,9 +76,19 @@ Each item was measured on Godot 4.7.2. Every one compiles, passes the parse gate
    - For each node path in a changed script, open the `.tscn` that uses the script and check the node exists under
      that name and path.
    - For scripts used in several scenes, check each scene.
-3. **RPC contract.** Covered by `rpc_check.sh` in section 2. Also check that a node path used across the network
+3. **A local captured by a lambda.** A lambda captures a local variable by value.
+   - A lambda that assigns a captured local (`hit.connect(func(): hits += 1)`) changes only its own copy: the
+     outer `hits` stays 0. A harness check like `hits == 0` then printed `ok` although the signal fired.
+     `warnings.sh` reports this one: `Reassigning lambda capture does not modify the outer local variable "hits"`.
+   - The other direction gives no warning: a local reassigned after a lambda that reads it was made. The lambda
+     keeps the old value. Check by hand, but only for lambdas that can run after the reassignment: connected to a
+     signal, stored in a variable or member, deferred, or passed on to be called later (a poll, a timer). For those,
+     list the locals the lambda reads and flag any of them assigned again later in the same function. A lambda used
+     up at once (`arr.map(func ...)`, `sort_custom`, an immediate `.call()`) saw the value it needed: not a finding.
+   - Members, a Dictionary or an Array written through (`box["n"] += 1`, `arr.append(x)`) are shared and fine.
+4. **RPC contract.** Covered by `rpc_check.sh` in section 2. Also check that a node path used across the network
    exists on both sides: a mismatch logs its error only on the *receiving* side.
-4. **Claims of "tested".** If the change says it was verified, ask what printed the verdict. A run that exits 0
+5. **Claims of "tested".** If the change says it was verified, ask what printed the verdict. A run that exits 0
    proves nothing without a banner (skill `godot-run`). Check whether a harness or test covers the changed code
    (Grep `res://tools/diag_*`, `test_*` for the class or function names). If none does, say so as a gap, not as a bug.
 

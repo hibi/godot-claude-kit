@@ -99,6 +99,14 @@ Every rule below exists because breaking it produced a green run that was wrong:
    `queue_free()`, one frame is not always enough: the demo's check passed locally and failed once on a GitHub
    runner with `alive=true`. Poll instead, with a bound:
    `for i in 10: if not is_instance_valid(e): break; await get_tree().process_frame` (one statement per line).
+9. **A lambda captures a local by value.** Both directions compile and run with exit 0:
+   - A lambda that assigns a captured local changes only its own copy. `var hits := 0` +
+     `hit.connect(func(): hits += 1)` left `hits` at 0 after the signal fired, so `_check("a miss fires no hit",
+     hits == 0)` printed `ok`, and the harness printed `PASS` with exit 0.
+   - A local reassigned after the lambda was made is not seen by the lambda: it read `aim=1` after `aim = 2`.
+   - What a lambda writes, or what changes after the lambda exists, goes into a member variable or a box shared by
+     reference. Measured to work: a member (`_fired = true`), `box["hits"] += 1` on a Dictionary, `arr[0] = true` and
+     `arr.append(1)` on an Array.
 
 A harness whose own script does not parse leaves the scene running as a bare node. That run exits 0, prints a
 `SCRIPT ERROR` and no banner. The runner catches it through the error token and the missing banner. Exit code alone
@@ -131,6 +139,9 @@ variable, a shadowed one, integer division, a standalone expression, unreachable
 - **An un-awaited call to a coroutine** (`slow()` where `slow` contains `await`) warns only when the project enables
   `debug/gdscript/warnings/missing_await`, and that setting is **off** by default. Using such a call's return value
   without `await` is a parse error, so the gate catches that case.
+- **A lambda that assigns a captured local** (rule 9 of section 3) warns with `--debug`: `Reassigning lambda capture
+  does not modify the outer local variable "hits"`. The other direction, a local reassigned after the lambda was
+  made, gives no warning with the default warning settings.
 
 `warnings.sh` handles all three:
 

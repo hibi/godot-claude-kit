@@ -41,6 +41,7 @@ In Godot 4 that proves nothing. Every row below exits **0**:
 | `--import` on a project with a hard syntax error | 0 | nothing at all |
 | a scene whose own script does not parse | 0 | `SCRIPT ERROR`, then the scene runs as a bare node |
 | a test harness that forgot to `await` a slow check | 0 | `PASS`, and the failing check never prints |
+| a test harness that counts a signal with `hits += 1` in a lambda | 0 | `ok`: a lambda captures a local by value, so `hits` stays 0 although the signal fired |
 | a run with `--user-data-dir` (Godot 4 has no such flag) | 0 | empty: the scene never ran |
 | a fresh clone run before `--import` | 0 | a false `Could not find type "<ClassName>"` |
 | a healthy scene that simply prints nothing | 0 | byte-identical to the "never ran" log above |
@@ -96,7 +97,7 @@ by [`tests/measure_traps.sh`](https://github.com/hibi/godot-claude-kit/blob/mast
 
 | Agent | What it does |
 |---|---|
-| **`gdscript-reviewer`** | Reviews your GDScript changes, read-only. Every finding comes with evidence: the parse gate, the engine's warnings, the RPC check, or the code itself. It also checks the traps the engine stays silent about: a coroutine called without `await`, and a `$Node` path the scene does not have. If it finds nothing, it says `REVIEW: clean`, and it does not invent findings. |
+| **`gdscript-reviewer`** | Reviews your GDScript changes, read-only. Every finding comes with evidence: the parse gate, the engine's warnings, the RPC check, or the code itself. It also checks the traps the engine stays silent about: a coroutine called without `await`, a `$Node` path the scene does not have, and a local a lambda was meant to change. If it finds nothing, it says `REVIEW: clean`, and it does not invent findings. |
 
 The skills trigger on their own. Ask Claude to "check that everything still compiles", "verify the damage fix",
 "test the multiplayer hit sync", "run the unit tests", "check the HUD still looks right", "review my changes" or "set
