@@ -233,10 +233,12 @@ done
 
 # Unit tests (GUT / gdUnit4) when a framework is installed. Without a known test directory: a visible SKIP.
 UNIT="none"
-if [ -f "$PROJECT/addons/gut/gut_cmdln.gd" ] || [ -f "$PROJECT/addons/gdUnit4/bin/GdUnitCmdTool.gd" ]; then
+# The frameworks' command-line entry points, project-relative (the same names test_run.sh uses).
+GUT_TOOL="addons/gut/gut_cmdln.gd" GDU_TOOL="addons/gdUnit4/bin/GdUnitCmdTool.gd"
+if [ -f "$PROJECT/$GUT_TOOL" ] || [ -f "$PROJECT/$GDU_TOOL" ]; then
   gutdirs=0
   [ -f "$PROJECT/.gutconfig.json" ] && tr -d '\r\n' < "$PROJECT/.gutconfig.json" | grep -q '"dirs"[[:space:]]*:[[:space:]]*\[[^]]*res://' \
-    && [ -f "$PROJECT/addons/gut/gut_cmdln.gd" ] && gutdirs=1
+    && [ -f "$PROJECT/$GUT_TOOL" ] && gutdirs=1
   if [ ! -f "$TESTRUN" ]; then
     RESULTS+=("SKIP  unit  tests (test_run.sh not found next to ci.sh or in ../godot-unit-tests/)"); UNIT="SKIPPED"
   elif [ $TESTDIRS = 0 ] && [ $gutdirs = 0 ]; then
