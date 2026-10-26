@@ -221,7 +221,10 @@ ci_case() {  # ci_case <label> <setup command, run inside the copy> [ci.sh args.
 ci_case "clean demo (expect PASS)" ":"
 ci_case "syntax error in src/ (expect FAIL: gate)" "cp '$FIX/syntax_error.gd' src/_sabotage.gd"
 ci_case "Health clamp removed (expect FAIL: diag_health)" "cp '$FIX/health_no_clamp.gd' src/health.gd"
-ci_case "gate scene missing (expect FAIL: gate; diag_health still PASS)" "rm tools/ci/parse_gate.tscn"
+ci_case "gate scene missing (expect PASS via the kit script gate)" "rm tools/ci/parse_gate.tscn tools/ci/parse_gate.gd"
+ci_case "gate scene missing + syntax error in src/ (expect FAIL: script gate)" \
+  "rm tools/ci/parse_gate.tscn tools/ci/parse_gate.gd; cp '$FIX/syntax_error.gd' src/_sabotage.gd"
+ci_case "--gate naming a missing scene (expect FAIL: gate, no fallback)" ":" --gate res://tools/ci/nope.tscn
 ci_case "--min-harnesses 3 with two harnesses (expect FAIL)" ":" --min-harnesses 3
 
 # Kit: `ci.sh install` into a git repo whose Godot project sits in game/. The workflow must point at game/ (a path
@@ -233,6 +236,16 @@ if command -v git > /dev/null; then
   printf '\n=== KIT ci.sh install, project in game/ of a git repo (expect --path "game", vendored copy PASS)\n    exit=%s\n' $?
   grep -E 'run: bash' "$G/.github/workflows/godot-ci.yml" | sed 's/^ */    | /'
   (cd "$G" && GODOT_BIN="$GODOT_BIN" bash game/tools/ci/ci.sh --path game 2>&1 | tail -1 | sed 's/^/    | /')
+  printf '    (shots step in the workflow: %s)\n' "$(grep -c 'Virtual display' "$G/.github/workflows/godot-ci.yml")"
+  # No gate scene + --shot-dir: the vendored script gate (inside res:// - re-loading itself crashed the engine before
+  # it skipped itself) and the workflow's xvfb step + shot options.
+  G="$WORK/ci_repo2"; rm -rf "$G"; mkdir -p "$G"; cp -r "$DEMO" "$G/game"; rm -rf "$G/game/.godot"; git -C "$G" init -q
+  rm "$G/game/tools/ci/parse_gate.tscn" "$G/game/tools/ci/parse_gate.gd"
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$G/game" install --shot-dir res://tests/shots > "$WORK/logs/ci_install2.out" 2>&1
+  printf '\n=== KIT ci.sh install --shot-dir, no gate scene (expect shots step + options, vendored script gate PASS)\n    exit=%s\n' $?
+  grep -E 'run: bash|name: Virtual display' "$G/.github/workflows/godot-ci.yml" | sed 's/^ */    | /'
+  (cd "$G" && GODOT_BIN="$GODOT_BIN" bash game/tools/ci/ci.sh --path game 2>&1 | grep -E '^   (PASS|FAIL)  gate|^GODOT-CI' \
+    | sed 's/^ */    | /')
 else
   printf '\n=== KIT ci.sh install: SKIPPED (no git on this machine)\n'
 fi
@@ -606,6 +619,15 @@ if can_draw; then
       "$([ -n "$req" ] && echo FAIL || echo 'PASS, not compared')" $rc
     grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
   done
+  rm -rf "$WORK/cand"
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots_other --require-shots --candidates "$WORK/cand" \
+    > "$CIS" 2>&1
+  printf '\n=== KIT ci.sh --candidates, golden from another renderer (expect FAIL + candidate png/json for this renderer)\n    exit=%s\n' $?
+  grep -E '^   (PASS|FAIL)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
+  printf '    (candidate: png %s, json %s, driver %s; shots_other untouched: %s)\n' \
+    "$([ -s "$WORK/cand/main.png" ] && echo yes || echo NO)" "$([ -s "$WORK/cand/main.json" ] && echo yes || echo NO)" \
+    "$(sed -n 's/.*"driver": "\(.*\)".*/\1/p' "$WORK/cand/main.json" 2>/dev/null)" \
+    "$(grep -q 'another driver' "$SP/tests/shots_other/main.json" && echo yes || echo NO)"
 else
   printf '\n=== KIT shot.sh drawing cases: SKIPPED (no display and no xvfb-run)\n'
 fi

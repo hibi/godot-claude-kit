@@ -2,7 +2,8 @@ extends SceneTree
 
 ## PARSE GATE without a file in the project: does every script under res:// compile?
 ## The same walk and checks as templates/parse_gate.gd, run as `--script` from this skill's directory - use gate.sh,
-## which picks this when the project has no gate scene of its own and passes the path the engine understands.
+## which picks this when the project has no gate scene of its own and passes the path the engine understands. godot-ci's
+## ci.sh does the same, and `ci.sh install` vendors a copy into res://tools/ci/ (the walk skips this file itself).
 ##
 ##   bash gate.sh --path <project>          (never a bare `godot ...` run: no isolation, no backstop)
 ##
@@ -37,8 +38,10 @@ func _walk(dir: String) -> void:
 
 
 func _check(path: String) -> void:
-	# Fresh load (CACHE_MODE_IGNORE): a cached copy would be handed back without a re-parse. This script lives outside
-	# res://, so the walk never reaches it (re-loading a RUNNING gate script this way crashed the engine).
+	# Fresh load (CACHE_MODE_IGNORE): a cached copy would be handed back without a re-parse. Never this script itself:
+	# re-loading the RUNNING gate this way crashed the engine (signal 11) when a copy was vendored into res://tools/ci/.
+	if path == get_script().resource_path:
+		return
 	_count += 1
 	var s := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as Script
 	if s == null:

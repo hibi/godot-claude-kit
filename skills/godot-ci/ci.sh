@@ -7,8 +7,10 @@
 #   bash ci.sh --path <project> install [options]    vendor ci.sh, godot_run.sh (and net_run.sh) into the project
 #                                                    and write a GitHub Actions workflow that runs them
 #
-#   --gate RES            the parse gate scene (default res://tools/ci/parse_gate.tscn). Required: without it a CI
-#                         cannot tell a syntax error from a pass (`--import` exits 0 on one).
+#   --gate RES            the parse gate scene (default res://tools/ci/parse_gate.tscn). A gate always runs: without one
+#                         a CI cannot tell a syntax error from a pass (`--import` exits 0 on one). When the DEFAULT scene
+#                         is missing, parse_gate_script.gd (skill godot-headless-harness; vendored by install) runs as
+#                         --script instead - same walk and checks. A --gate you name that does not exist is a FAIL.
 #   --min-harnesses N     FAIL when fewer than N harnesses (diag + netdiag) are found (default 0). Set it to the number
 #                         you have, so a moved or renamed harness directory cannot quietly shrink the run to the gate.
 #   --frames N, --timeout S   passed to every run (see godot_run.sh)
@@ -24,8 +26,12 @@
 #                         xvfb-run): the summary says SKIP, never PASS.
 #   --require-shots       every golden must really be compared: no display, or a golden from another renderer
 #                         (e.g. after a CI image update bumped Mesa), is a FAIL instead of a SKIP / "not compared" note
+#   --candidates DIR      for every golden that failed or was not compared, shoot a fresh golden (png + json) into
+#                         DIR - on a CI runner that is the golden for its renderer. After a real regression it shows
+#                         the broken frame: look at it before you copy it over the old golden.
 #   install only:  --dir D (project-relative, default tools/ci), --godot-version V (e.g. 4.7.2-stable; default:
-#                  read from the engine in GODOT_BIN / PATH)
+#                  read from the engine in GODOT_BIN / PATH), --shot-dir RES (the workflow then installs xvfb and
+#                  runs the shots with --require-shots, leaving candidates in the logs artifact)
 #
 # Harnesses, found outside .godot/, addons/ and directories holding a .gdignore:
 #   diag_<name>.tscn      one process, banner "DIAG-<NAME>: PASS" (skill godot-headless-harness)
@@ -39,14 +45,15 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-PROJECT="" GATE="res://tools/ci/parse_gate.tscn" MIN_H=0 OUT="" DIR="tools/ci" GVER="" RPC=1 RUNARGS=() ARGS=()
-TESTARGS=() TESTDIRS=0 SHOTDIR="" REQ_SHOTS=0
+PROJECT="" GATE="res://tools/ci/parse_gate.tscn" GATE_SET=0 MIN_H=0 OUT="" DIR="tools/ci" GVER="" RPC=1 RUNARGS=()
+ARGS=() TESTARGS=() TESTDIRS=0 SHOTDIR="" REQ_SHOTS=0 CAND=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --path) PROJECT="${2%/}"; shift 2 ;;
     --shot-dir) SHOTDIR="${2%/}"; SHOTDIR="${SHOTDIR#res://}"; shift 2 ;;
     --require-shots) REQ_SHOTS=1; shift ;;
-    --gate) GATE="$2"; shift 2 ;;
+    --candidates) CAND="${2%/}"; shift 2 ;;
+    --gate) GATE="$2"; GATE_SET=1; shift 2 ;;
     --no-rpc-check) RPC=0; shift ;;
     --test-dir) TESTARGS+=(--dir "$2"); TESTDIRS=1; shift 2 ;;
     --test-framework) TESTARGS+=(--framework "$2"); shift 2 ;;
@@ -77,11 +84,16 @@ TESTRUN="$HERE/test_run.sh"
 # Screenshot runner + its capture script (skill godot-screenshot), same lookup.
 SHOT="$HERE/shot.sh"
 [ -f "$SHOT" ] || SHOT="$HERE/../godot-screenshot/shot.sh"
+# The script gate for projects without a gate scene (skill godot-headless-harness), same lookup. It skips itself when
+# it sits inside res:// (re-loading the running gate crashed the engine).
+SGATE="$HERE/parse_gate_script.gd"
+[ -f "$SGATE" ] || SGATE="$HERE/../godot-headless-harness/parse_gate_script.gd"
+native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
 if [ "${ARGS[0]:-}" = install ]; then
   dest="$PROJECT/$DIR"
   for f in "$dest/ci.sh" "$dest/godot_run.sh" "$dest/net_run.sh" "$dest/rpc_check.sh" "$dest/test_run.sh" \
-           "$dest/shot.sh" "$dest/shot_capture.gd"; do
+           "$dest/shot.sh" "$dest/shot_capture.gd" "$dest/parse_gate_script.gd"; do
     [ -e "$f" ] && { echo "install: $f already exists - not overwriting (delete it to update)"; exit 1; }
   done
   if [ -z "$GVER" ]; then
@@ -112,9 +124,19 @@ if [ "${ARGS[0]:-}" = install ]; then
     cp "$SHOT" "$dest/shot.sh"; cp "$(dirname "$SHOT")/shot_capture.gd" "$dest/shot_capture.gd"
     vendored="$vendored, res://$DIR/shot.sh, res://$DIR/shot_capture.gd"
   fi
-  sed -e "s|__GODOT_VERSION__|$GVER|g" -e "s|__PROJECT__|$rel|g" -e "s|__CI__|$rel/$DIR/ci.sh|g" \
-    "$HERE/templates/godot-ci.yml" > "$wf"
-  echo "wrote $vendored and $wf (Godot $GVER, project dir '$rel')"
+  if [ -f "$SGATE" ]; then cp "$SGATE" "$dest/parse_gate_script.gd"; vendored="$vendored, res://$DIR/parse_gate_script.gd"; fi
+  # Shots: keep the xvfb step (between the markers) and add the shot options; else drop that block.
+  if [ -n "$SHOTDIR" ]; then
+    shotargs=" --shot-dir res://$SHOTDIR --require-shots --candidates \"\$RUNNER_TEMP/godot-ci-logs/candidates\""
+    block=(-e '/# >>> shots/d' -e '/# <<< shots/d')
+    ls "$PROJECT/$SHOTDIR"/*.json >/dev/null 2>&1 \
+      || echo "install: note: res://$SHOTDIR has no goldens yet - ci.sh FAILs until shot.sh --update-golden wrote some"
+  else
+    shotargs="" block=(-e '/# >>> shots/,/# <<< shots/d')
+  fi
+  sed "${block[@]}" -e "s|__GODOT_VERSION__|$GVER|g" -e "s|__PROJECT__|$rel|g" -e "s|__CI__|$rel/$DIR/ci.sh|g" \
+    -e "s|__SHOTS__|$shotargs|g" "$HERE/templates/godot-ci.yml" > "$wf"
+  echo "wrote $vendored and $wf (Godot $GVER, project dir '$rel'${SHOTDIR:+, shots res://$SHOTDIR})"
   echo "next: run 'bash $rel/$DIR/ci.sh --path $rel' locally first; commit all of these files."
   exit 0
 fi
@@ -122,7 +144,6 @@ fi
 
 [ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/godot_ci.XXXXXX")
 mkdir -p "$OUT"
-show_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
 gdignored() {  # gdignored <file>: is any directory between the file and the project root marked with .gdignore?
   local d; d=$(dirname "$1")
@@ -140,8 +161,11 @@ done < <(find "$PROJECT" \( -path "$PROJECT/.godot" -o -path "$PROJECT/addons" -
            -o -type f \( -name 'diag_*.tscn' -o -name 'netdiag_*.tscn' \) -print | sort)
 
 RESULTS=() failed=() n=0 IMPORT=()
-run() {  # run <kind> <res path> [banner]   gate|diag: one runner process; net: net_run.sh (server + clients)
+run() {  # run <kind> <res path> [banner [engine args...]]   gate|diag: one runner process; net: net_run.sh
+  # (server + clients). Engine args replace the scene (the script gate); <res path> is then only the label.
   local kind="$1" scene="$2" banner="${3:-}"
+  shift $(($# < 3 ? $# : 3))
+  local target=("$scene"); [ $# -gt 0 ] && target=(-- "$@")
   local log="$OUT/$(printf '%s' "${scene#res://}" | tr '/' '_')"
   n=$((n + 1))
   echo "== $kind $scene"
@@ -150,7 +174,7 @@ run() {  # run <kind> <res path> [banner]   gate|diag: one runner process; net: 
       > "$OUT/runner.out" 2>&1
   else
     bash "$RUNNER" --path "$PROJECT" --banner "$banner" --log "$log.log" ${IMPORT[@]+"${IMPORT[@]}"} \
-      ${RUNARGS[@]+"${RUNARGS[@]}"} "$scene" > "$OUT/runner.out" 2>&1
+      ${RUNARGS[@]+"${RUNARGS[@]}"} "${target[@]}" > "$OUT/runner.out" 2>&1
   fi
   local rc=$?    # straight after the run - anything in between would overwrite it with its own status
   # The first run imports (a fresh clone has no .godot/ cache); every later run reuses that cache.
@@ -162,11 +186,19 @@ run() {  # run <kind> <res path> [banner]   gate|diag: one runner process; net: 
   else RESULTS+=("FAIL  $k  $scene"); failed+=("$scene"); fi
 }
 
+GATENOTE="parse gate"
 if [ -f "$PROJECT/${GATE#res://}" ]; then
   run gate "$GATE" '^PARSE-GATE: PASS'
-else
-  RESULTS+=("FAIL  gate  $GATE (missing - scaffold it with the godot-headless-harness skill)"); failed+=("$GATE")
+elif [ $GATE_SET = 0 ] && [ -f "$SGATE" ]; then
+  # No gate scene: the same checks as a --script run, nothing added to the project.
+  run gate parse_gate_script.gd '^PARSE-GATE: PASS' --script "$(native "$SGATE")"
+  GATENOTE="parse gate (kit script gate)"
+elif [ $GATE_SET = 1 ]; then
+  RESULTS+=("FAIL  gate  $GATE (missing - the --gate you named does not exist)"); failed+=("$GATE")
   n=$((n + 1))
+else
+  RESULTS+=("FAIL  gate  $GATE (missing, and parse_gate_script.gd not found next to ci.sh or in ../godot-headless-harness/)")
+  failed+=("$GATE"); n=$((n + 1))
 fi
 # Static: every RPC the project sends must name an @rpc function. The gate cannot see this: such a call compiles.
 if [ "$RPC" = 0 ]; then
@@ -260,16 +292,22 @@ if [ -n "$SHOTDIR" ]; then
       SHOTS="ran"
       if [ $rc -eq 0 ]; then ns=$((ns + 1)); RESULTS+=("PASS  shot  $g")
       elif [ $rc -eq 2 ] && [ $REQ_SHOTS = 1 ]; then
-        RESULTS+=("FAIL  shot  $g (golden from another renderer, not compared: re-make it here with shot.sh --update-golden)")
+        RESULTS+=("FAIL  shot  $g (golden from another renderer, not compared: ${CAND:+look at the candidate in $CAND, or }re-make it here with shot.sh --update-golden)")
         failed+=("shot:$g")
       elif [ $rc -eq 2 ]; then
         ns=$((ns + 1)); nsu=$((nsu + 1)); RESULTS+=("PASS  shot  $g (frame ok; golden not compared: other renderer)")
       else RESULTS+=("FAIL  shot  $g"); failed+=("shot:$g"); fi
+      if [ $rc -ne 0 ] && [ -n "$CAND" ]; then
+        echo "== candidate golden $g -> $CAND/$g.png"
+        bash "$SHOT" --path "$PROJECT" --scene "$scene" --size "$size" --golden "$CAND/$g.png" --update-golden \
+          --out "$OUT/shots/$g.candidate.png" --no-import > "$OUT/shot.out" 2>&1
+        sed 's/^/   /' "$OUT/shot.out"
+      fi
     done
   fi
 fi
 
-echo "== summary (logs in $(show_path "$OUT"))"
+echo "== summary (logs in $(native "$OUT"))"
 printf '   %s\n' "${RESULTS[@]}"
 nh=${#HARNESSES[@]}
 why=""
@@ -285,5 +323,5 @@ shotnote=""
 if [ "$SHOTS" = ran ]; then
   shotnote=", $ns shot(s)"; [ $nsu -gt 0 ] && shotnote="$shotnote ($nsu not compared: golden from another renderer)"
 fi
-echo "GODOT-CI: PASS (parse gate, $rpcnote, $nh/$nh harnesses: $nd diag, $nn net$unitnote$shotnote)"
+echo "GODOT-CI: PASS ($GATENOTE, $rpcnote, $nh/$nh harnesses: $nd diag, $nn net$unitnote$shotnote)"
 exit 0

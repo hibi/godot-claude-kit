@@ -29,18 +29,12 @@ jobs:
 
       # demo/tests/shots/main.png was rendered on this runner image (llvmpipe, see main.json). --require-shots: if a
       # runner update changes the Mesa version, the compare cannot happen and the job goes red instead of letting the
-      # check go quiet. The next step then leaves a fresh golden for this runner in the logs artifact (candidate/):
+      # check go quiet. --candidates then leaves a fresh golden for this runner in the logs artifact (candidates/):
       # look at it, and if it is right, commit it over demo/tests/shots/.
       - name: Import, parse gate, harnesses, screenshots
         run: |
           bash "skills/godot-ci/ci.sh" --path "demo" --min-harnesses 2 --shot-dir res://tests/shots --require-shots \
-            --out "$RUNNER_TEMP/godot-ci-logs"
-
-      - name: Candidate golden for this runner (only when the job failed)
-        if: failure()
-        run: |
-          bash "skills/godot-screenshot/shot.sh" --path "demo" --out "$RUNNER_TEMP/godot-ci-logs/candidate/shot.png" \
-            --golden "$RUNNER_TEMP/godot-ci-logs/candidate/main.png" --update-golden
+            --candidates "$RUNNER_TEMP/godot-ci-logs/candidates" --out "$RUNNER_TEMP/godot-ci-logs"
 
       - name: Keep the logs
         if: always()

@@ -92,7 +92,7 @@ by [`tests/measure_traps.sh`](tests/measure_traps.sh). If a claim does not repro
 | **`godot-multiplayer-harness`** | A real headless **server and client(s) as separate engine processes**, started by `net_run.sh`, which judges every process's log and passes only when all of them pass. A harness template: one scene for both roles, a short timeout on every network wait, a "client done" handshake, loopback-only binding. A static **RPC check** that every RPC the project sends lands on an `@rpc` function. |
 | **`godot-unit-tests`** | Runs your **GUT or gdUnit4** tests through the runner with the flags that avoid their traps. It judges them by the framework's exit code, its **JUnit XML** (fresh every run, a missing one is a FAIL) and the lines where they exit 0 without testing: a dropped test file, nothing run, no test cases. A `--min-tests` floor counts tests that *passed*. Reports never land in your project. |
 | **`godot-screenshot`** | Renders a scene to a PNG in a real window, parked off-screen (on Linux: xvfb). It fails a frame that is blank, the wrong size or comes with engine errors. It compares the frame with a **golden image**, but only one rendered by the same driver and GPU. Then Claude has to **open the PNG and say what it sees**. No capture script or scene is added to your project. |
-| **`godot-ci`** | One command for the whole project: import, the parse gate, the RPC check, every `diag_*` and `netdiag_*` harness, the unit tests and the golden screenshots, with one verdict. `install` writes a GitHub Actions workflow that runs the same script on Linux. |
+| **`godot-ci`** | One command for the whole project: import, the parse gate, the RPC check, every `diag_*` and `netdiag_*` harness, the unit tests and the golden screenshots, with one verdict. A project without a gate scene gets the kit's script gate. `install` writes a GitHub Actions workflow that runs the same script on Linux; with `--shot-dir` it also installs a virtual display and compares the screenshots there. |
 
 | Agent | What it does |
 |---|---|
@@ -120,6 +120,38 @@ The skills are then available as `/godot-kit:godot-run`, `/godot-kit:godot-headl
 - Godot 4.x. The kit was measured on 4.7.2.
 - `bash`. On Windows that is Git Bash, which Claude Code already uses.
 - The engine binary as `GODOT_BIN`, or `godot` on `PATH`. On Windows, use the `*_console.exe` build.
+
+## What it runs, writes and fetches
+
+**Runs.** The skills are bash scripts, readable in `skills/`. They run on your machine when Claude follows a skill:
+
+- The Godot binary you point them at. Nothing is installed with the plugin, and the plugin never downloads an engine.
+- Standard tools: `grep`, `sed`, `awk`, `find`, coreutils `timeout`, `mktemp`.
+- On Linux, `xvfb-run` for screenshots, if it is installed.
+- With `godot-unit-tests`, the GUT or gdUnit4 that is already in your project's `addons/`.
+
+**Writes.**
+
+- Every engine run gets a fresh temp directory as its APPDATA / HOME, so your editor settings are never touched.
+  Logs go to temp directories too.
+- In your project, only what you ask for:
+  - the usual `.godot/` import cache;
+  - scaffolded gate and harness files;
+  - golden screenshots (`--update-golden`);
+  - the vendored CI scripts and `.github/workflows/godot-ci.yml` (`ci.sh install`).
+
+  The scaffold and `install` never overwrite an existing file. `--update-golden` replaces the golden it names; that
+  is its job. The `gdscript-reviewer` agent is read-only.
+
+**Network.**
+
+- The plugin sends nothing anywhere.
+- The multiplayer harness opens ENet connections between its own engine processes, bound to `127.0.0.1` only.
+- The GitHub Actions workflow that `ci.sh install` writes runs on GitHub's runner, not on your machine. It downloads
+  the official Godot build from `github.com/godotengine/godot/releases`. With `--shot-dir`, it also installs xvfb and
+  Mesa with `apt-get`.
+- The kit's own test script `tests/measure_traps.sh` downloads GUT and gdUnit4 at versions pinned by sha256, into a
+  temp cache. It is for developing the kit; the skills never run it.
 
 ## Quick start
 

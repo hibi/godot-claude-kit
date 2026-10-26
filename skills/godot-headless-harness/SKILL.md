@@ -32,7 +32,9 @@ bash "${CLAUDE_SKILL_DIR}/gate.sh" --path .              # last line: the runner
 bash "${CLAUDE_SKILL_DIR}/gate.sh" --path . --min 40     # script gate: fewer than 40 scripts fails
 ```
 
-For CI, scaffold the scene (section 1). `ci.sh` vendors the scene's files into the project, and it requires them.
+`ci.sh` (skill `godot-ci`) does the same: it runs the gate scene when there is one, else this script gate, and
+`ci.sh install` vendors a copy of the script. Scaffold the scene (section 1) when you want `MIN_SCRIPTS` and the
+skipped directories kept in the project itself.
 
 ## 1. Put them into the project
 

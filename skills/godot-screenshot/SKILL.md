@@ -127,12 +127,15 @@ to it, and compares it with the golden.
   run there: drawn, right size, not blank, no engine error.
 - `--require-shots` turns both of these into a FAIL. Use it when the goldens were made on the CI machine itself, so a
   missing display or a changed renderer cannot quietly switch the compare off.
+- `--candidates <dir>` shoots a fresh golden for every golden that failed or was not compared. That is how you get a
+  golden from the runner. `ci.sh install --shot-dir res://tests/shots` writes a workflow that does all of this; the
+  `godot-ci` skill describes the first run.
 - Measured on GitHub's `ubuntu-latest` with the kit's own workflow. After
   `apt-get install xvfb libgl1-mesa-dri libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libfontconfig1`,
   the frame rendered with OpenGL on llvmpipe (Mesa 25.2.8).
 - That runner has ALSA but no sound card, which is where the audio `ERROR` in the table above was found.
 - The kit keeps its golden, rendered on that runner, in `demo/tests/shots/` and runs `ci.sh` with `--require-shots`.
-  When the job fails, a final step leaves a fresh candidate golden in the logs artifact.
+  With `--candidates`, a failed or uncompared shot leaves a fresh candidate golden in the logs artifact.
 
 ## 6. Reporting
 

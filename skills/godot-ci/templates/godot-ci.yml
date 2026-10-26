@@ -23,8 +23,19 @@ jobs:
           chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64"
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
 
+      # >>> shots
+      # Golden screenshots need a display: a virtual one (xvfb), rendered by Mesa's llvmpipe with OpenGL. A golden made
+      # on your machine comes from another renderer, so --require-shots fails the job until the goldens come from this
+      # runner: then the logs artifact holds candidates/<name>.png + .json. Look at each one; if it is right, commit it
+      # over your golden. The same happens when a runner image update changes the Mesa version.
+      - name: Virtual display for screenshots
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libfontconfig1
+      # <<< shots
+
       - name: Import, parse gate, harnesses
-        run: bash "__CI__" --path "__PROJECT__" --out "$RUNNER_TEMP/godot-ci-logs"
+        run: bash "__CI__" --path "__PROJECT__"__SHOTS__ --out "$RUNNER_TEMP/godot-ci-logs"
 
       - name: Keep the logs
         if: always()
