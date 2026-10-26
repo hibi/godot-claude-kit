@@ -18,8 +18,8 @@ jobs:
         run: |
           curl -sSfL -o "$RUNNER_TEMP/godot.zip" \
             "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          # The zip stores the binary with mode 0755, and unzip restores it: no chmod needed.
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
-          chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64"
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
 
       - name: Virtual display for screenshots
@@ -27,7 +27,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb libgl1-mesa-dri libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libfontconfig1
 
-      # demo/tests/shots/main.png was rendered on this runner image (llvmpipe, see main.json). --require-shots: if a
+      # The golden in demo/tests/shots/ was rendered on this runner image (llvmpipe, see its .json). --require-shots: if a
       # runner update changes the Mesa version, the compare cannot happen and the job goes red instead of letting the
       # check go quiet. --candidates then leaves a fresh golden for this runner in the logs artifact (candidates/):
       # look at it, and if it is right, commit it over demo/tests/shots/.

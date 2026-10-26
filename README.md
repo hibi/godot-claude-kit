@@ -27,7 +27,7 @@ stop condition you can trust:
 - **Tested the way a loop runs it.** Fresh `claude -p` sessions, with only the plugin loaded and a plain prompt that
   never names the kit, picked the right skill or agent and returned the right verdict.
 
-![Claude runs a real headless server and client, catches a broken server-side hit check and names the line](docs/demo.gif)
+![Claude runs a real headless server and client, catches a broken server-side hit check and names the line](https://raw.githubusercontent.com/hibi/godot-claude-kit/media/demo.gif)
 
 *A real Claude Code session, replayed and condensed. The validation in the demo's `net_match.gd` was broken on
 purpose, and the prompt did not mention the kit. Claude picked the multiplayer skill on its own. It ran a real server
@@ -150,8 +150,9 @@ The skills are then available as `/godot-kit:godot-run`, `/godot-kit:godot-headl
 - The GitHub Actions workflow that `ci.sh install` writes runs on GitHub's runner, not on your machine. It downloads
   the official Godot build from `github.com/godotengine/godot/releases`. With `--shot-dir`, it also installs xvfb and
   Mesa with `apt-get`.
-- The kit's own test script `tests/measure_traps.sh` downloads GUT and gdUnit4 at versions pinned by sha256, into a
-  temp cache. It is for developing the kit; the skills never run it.
+- The kit's own test script `tests/measure_traps.sh` downloads nothing. It checks GUT and gdUnit4 release zips that
+  you put into its cache yourself against pinned sha256 sums, and prints the missing ones with their URLs. It is for
+  developing the kit; the skills never run it.
 
 ## Quick start
 
@@ -206,7 +207,7 @@ skills/godot-ci/       ci.sh, GitHub Actions template
 agents/gdscript-reviewer.md   the read-only review agent
 demo/                  small Godot 4 project every claim is measured on
 tests/measure_traps.sh reproduces every trap; tests/sabotage/ holds the broken-on-purpose fixtures,
-                       tests/fixtures/ the GUT / gdUnit4 tests it runs (the frameworks are downloaded, pinned by sha256)
+                       tests/fixtures/ the GUT / gdUnit4 tests it runs (framework zips you supply, pinned by sha256)
 ```
 
 ## License

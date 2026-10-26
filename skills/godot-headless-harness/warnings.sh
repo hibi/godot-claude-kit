@@ -84,7 +84,7 @@ bash "$HERE/gate.sh" --path "$PROJECT" --gate "$GATE" --no-import --debug --time
 rc=$?
 if [ $rc -ne 0 ]; then
   sed 's/^/  /' "$WORK/debug.out"
-  echo "GODOT-WARN: FAIL (the --debug pass did not finish cleanly - log $WORK/debug.log)"
+  echo "GODOT-WARN: FAIL (the --debug run did not finish cleanly - log $WORK/debug.log)"
   exit 2
 fi
 

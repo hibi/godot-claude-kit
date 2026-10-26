@@ -148,7 +148,7 @@ bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path . src/player.gd src/hud.gd  # only
 |---|---|---|
 | `GODOT-WARN: CLEAN (...)` | 0 | no warning in the files asked (or the whole project) |
 | `GODOT-WARN: FOUND n (...)` | 1 | n warnings, listed above it |
-| `GODOT-WARN: FAIL (why)` | 2 | could not check: the gate failed, the `--debug` pass did not finish, a file is not in the project, or warnings are off |
+| `GODOT-WARN: FAIL (why)` | 2 | could not check: the gate failed, the `--debug` run did not finish, a file is not in the project, or warnings are off |
 | `GODOT-WARN: NO-ENGINE` | 3 | no binary |
 
 The project's own warning settings apply. A warning the project set to "error" fails the gate, like any parse error.

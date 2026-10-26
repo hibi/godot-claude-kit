@@ -385,14 +385,14 @@ GODOT_BIN="$GODOT_BIN" bash "$ROOT/skills/godot-run/godot_run.sh" --path "$IO" -
   res://tools/diag_health.tscn 2>&1 | tail -1 | sed 's/^/    | then --no-import diag_health: /'
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Unit-test frameworks: GUT 9.7.1 and gdUnit4 6.2.2, pinned and verified by sha256, downloaded once into a cache next to
-# the work dir (they are not vendored into the kit). Without network or on a checksum mismatch this section says
-# SKIPPED - it never passes silently. U1-U10 run the frameworks' own CLIs; the KIT cases run test_run.sh.
-FWC="${TMPDIR:-${TEMP:-/tmp}}/gck_fw_cache"; mkdir -p "$FWC"
+# Unit-test frameworks: GUT 9.7.1 and gdUnit4 6.2.2, pinned by sha256. This script downloads nothing: put the two
+# release zips into the cache dir yourself (GCK_FW_CACHE, default gck_fw_cache in the temp dir; the missing ones and
+# their URLs are printed). A missing zip or a checksum mismatch makes this section say SKIPPED - it never passes
+# silently. U1-U10 run the frameworks' own CLIs; the KIT cases run test_run.sh.
+FWC="${GCK_FW_CACHE:-${TMPDIR:-${TEMP:-/tmp}}/gck_fw_cache}"; mkdir -p "$FWC"
 fw_fetch() {  # fw_fetch <name> <url> <sha256> <addon dir in the archive> -> prints the addon path, or nothing
   local z="$FWC/$1.zip" x="$FWC/$1"
-  [ -f "$z" ] || curl -sSfL -o "$z.part" "$2" 2>/dev/null && { [ -f "$z" ] || mv "$z.part" "$z"; }
-  [ -f "$z" ] || return 1
+  [ -f "$z" ] || { echo "    missing $z - download $2 to that path" >&2; return 1; }
   # sha256sum reads stdin: given a path with backslashes (TEMP on Windows) it escapes the name and prefixes the line
   # with "\", which broke the comparison once.
   [ "$(sha256sum < "$z" | cut -d' ' -f1)" = "$3" ] || { echo "    checksum mismatch: $z" >&2; return 1; }
@@ -427,7 +427,7 @@ gdu_cli() {  # gdu_cli <copy> <log> [args] - never -d (see U9)
   timeout "${UTO:-120}" "$GODOT_BIN" --headless --path "$u" -s ${GDU_D:-} res://addons/gdUnit4/bin/GdUnitCmdTool.gd -c "$@" > "$l" 2>&1
 }
 if [ -z "$GUT_ADDON" ] || [ -z "$GDU_ADDON" ]; then
-  printf '\n=== U1-U10 + KIT test_run.sh: SKIPPED (GUT/gdUnit4 not downloaded: no network or checksum mismatch)\n'
+  printf '\n=== U1-U10 + KIT test_run.sh: SKIPPED (GUT/gdUnit4 zip missing from %s, or checksum mismatch)\n' "$FWC"
 else
   ucopy ug gut
   gut_cli ug u1.log -gdir=res://tests/gut; ushow "U1 GUT clean demo tests (expect exit 0, 2/2)" $? "$WORK/logs/u1.log"
@@ -581,37 +581,37 @@ shcase() {  # shcase <label> [shot.sh args]
   grep -E '^  golden: rmse|^GODOT-SHOT' "$WORK/logs/shot.out" | sed "s|$(nat "$WORK")|<work>|g; s/^ */    | /"
 }
 if can_draw; then
-  shcase "main.tscn (expect PASS)" --out "$WORK/shots/k_main.png"
+  shcase "main.tscn (expect PASS)" --out "$WORK/shots/k_default.png"
   shcase "enemy.tscn, no camera (expect FAIL: blank frame)" --scene res://src/enemy.tscn --out "$WORK/shots/k_enemy.png"
-  shcase "write a golden (expect PASS, .gdignore written)" --out "$WORK/shots/k_g.png" --golden "$SP/tests/shots/main.png" --update-golden
-  printf '    (.gdignore next to the golden: %s)\n' "$([ -e "$SP/tests/shots/.gdignore" ] && echo yes || echo NO)"
-  shcase "same scene vs that golden (expect PASS, rmse 0.000)" --out "$WORK/shots/k_same.png" --golden "$SP/tests/shots/main.png"
-  cp "$SP/tests/shots/main.png" "$WORK/golden.before.png"
-  shcase "--out and --golden the same file (expect FAIL, golden untouched)" --out "$SP/tests/shots/main.png" --golden "$SP/tests/shots/main.png"
-  printf '    (golden unchanged: %s)\n' "$(cmp -s "$WORK/golden.before.png" "$SP/tests/shots/main.png" && echo yes || echo NO)"
-  shcase "same golden at another --size (expect FAIL)" --out "$WORK/shots/k_size.png" --golden "$SP/tests/shots/main.png" --size 640x360
+  shcase "write a golden (expect PASS, .gdignore written)" --out "$WORK/shots/k_g.png" --golden "$SP/tests/kit_shots/kit.png" --update-golden
+  printf '    (.gdignore next to the golden: %s)\n' "$([ -e "$SP/tests/kit_shots/.gdignore" ] && echo yes || echo NO)"
+  shcase "same scene vs that golden (expect PASS, rmse 0.000)" --out "$WORK/shots/k_same.png" --golden "$SP/tests/kit_shots/kit.png"
+  cp "$SP/tests/kit_shots/kit.png" "$WORK/golden.before.png"
+  shcase "--out and --golden the same file (expect FAIL, golden untouched)" --out "$SP/tests/kit_shots/kit.png" --golden "$SP/tests/kit_shots/kit.png"
+  printf '    (golden unchanged: %s)\n' "$(cmp -s "$WORK/golden.before.png" "$SP/tests/kit_shots/kit.png" && echo yes || echo NO)"
+  shcase "same golden at another --size (expect FAIL)" --out "$WORK/shots/k_size.png" --golden "$SP/tests/kit_shots/kit.png" --size 640x360
   if [ "$WIN_DISPLAY" = 1 ]; then
     shcase "golden from the default driver, run with opengl3 (expect UNVERIFIED)" --out "$WORK/shots/k_gl.png" \
-      --golden "$SP/tests/shots/main.png" --driver opengl3
+      --golden "$SP/tests/kit_shots/kit.png" --driver opengl3
   fi
   cp "$SP/src/main.tscn" "$WORK/main.tscn.orig"
   sed -i 's/text = "score: 0"/text = "score: 8"/' "$SP/src/main.tscn"
-  shcase "HUD text score: 0 -> 8 (expect FAIL, rmse ~1.4)" --out "$WORK/shots/k_8.png" --golden "$SP/tests/shots/main.png"
+  shcase "HUD text score: 0 -> 8 (expect FAIL, rmse ~1.4)" --out "$WORK/shots/k_8.png" --golden "$SP/tests/kit_shots/kit.png"
   cp "$WORK/main.tscn.orig" "$SP/src/main.tscn"
   sed -i 's/offset_left = 16.0/offset_left = 5000.0/' "$SP/src/main.tscn"
-  shcase "HUD label moved off-screen (expect FAIL, rmse ~4.4)" --out "$WORK/shots/k_off.png" --golden "$SP/tests/shots/main.png"
-  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots > "$CIS" 2>&1
+  shcase "HUD label moved off-screen (expect FAIL, rmse ~4.4)" --out "$WORK/shots/k_off.png" --golden "$SP/tests/kit_shots/kit.png"
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/kit_shots > "$CIS" 2>&1
   printf '\n=== KIT ci.sh --shot-dir, label still off-screen (expect FAIL: shot:main)\n    exit=%s\n' $?
   grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
   cp "$WORK/main.tscn.orig" "$SP/src/main.tscn"
-  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots > "$CIS" 2>&1
+  GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/kit_shots > "$CIS" 2>&1
   printf '\n=== KIT ci.sh --shot-dir, restored (expect PASS, 1 shot)\n    exit=%s\n' $?
   grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
   # A golden whose fingerprint no longer matches (as after a CI image update bumped Mesa): a note, or with
   # --require-shots a FAIL.
   mkdir -p "$SP/tests/shots_other"; : > "$SP/tests/shots_other/.gdignore"
-  cp "$SP/tests/shots/main.png" "$SP/tests/shots_other/main.png"
-  sed 's/"api": "[^"]*"/"api": "0.0 (another driver)"/' "$SP/tests/shots/main.json" > "$SP/tests/shots_other/main.json"
+  cp "$SP/tests/kit_shots/kit.png" "$SP/tests/shots_other/kit.png"
+  sed 's/"api": "[^"]*"/"api": "0.0 (another driver)"/' "$SP/tests/kit_shots/kit.json" > "$SP/tests/shots_other/kit.json"
   for req in "" --require-shots; do
     GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots_other $req > "$CIS" 2>&1
     rc=$?   # before the $(...) below, which would overwrite it
@@ -625,9 +625,9 @@ if can_draw; then
   printf '\n=== KIT ci.sh --candidates, golden from another renderer (expect FAIL + candidate png/json for this renderer)\n    exit=%s\n' $?
   grep -E '^   (PASS|FAIL)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
   printf '    (candidate: png %s, json %s, driver %s; shots_other untouched: %s)\n' \
-    "$([ -s "$WORK/cand/main.png" ] && echo yes || echo NO)" "$([ -s "$WORK/cand/main.json" ] && echo yes || echo NO)" \
-    "$(sed -n 's/.*"driver": "\(.*\)".*/\1/p' "$WORK/cand/main.json" 2>/dev/null)" \
-    "$(grep -q 'another driver' "$SP/tests/shots_other/main.json" && echo yes || echo NO)"
+    "$([ -s "$WORK/cand/kit.png" ] && echo yes || echo NO)" "$([ -s "$WORK/cand/kit.json" ] && echo yes || echo NO)" \
+    "$(sed -n 's/.*"driver": "\(.*\)".*/\1/p' "$WORK/cand/kit.json" 2>/dev/null)" \
+    "$(grep -q 'another driver' "$SP/tests/shots_other/kit.json" && echo yes || echo NO)"
 else
   printf '\n=== KIT shot.sh drawing cases: SKIPPED (no display and no xvfb-run)\n'
 fi
@@ -637,17 +637,17 @@ if [ "$(uname -s)" = Linux ]; then
   for p in /usr/bin/* /bin/*; do
     case "${p##*/}" in xvfb-run|Xvfb) ;; *) [ -e "$NOX/${p##*/}" ] || ln -s "$p" "$NOX/${p##*/}" ;; esac
   done
-  mkdir -p "$SP/tests/shots"
+  mkdir -p "$SP/tests/kit_shots"
   env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$SHOT" --path "$SP" --no-import \
     --out "$WORK/shots/k_nd.png" > "$WORK/logs/shot.out" 2>&1
   printf '\n=== KIT shot.sh (Linux) without display and xvfb-run (expect NO-DISPLAY, exit 4)\n    exit=%s\n' $?
   tail -1 "$WORK/logs/shot.out" | sed 's/^/    | /'
-  if [ -f "$SP/tests/shots/main.json" ]; then
-    env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots \
+  if [ -f "$SP/tests/kit_shots/kit.json" ]; then
+    env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/kit_shots \
       > "$CIS" 2>&1
     printf '\n=== KIT ci.sh --shot-dir (Linux) without display and xvfb-run (expect PASS with shots SKIPPED)\n    exit=%s\n' $?
     grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'
-    env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/shots \
+    env -u DISPLAY -u WAYLAND_DISPLAY PATH="$NOX" GODOT_BIN="$GODOT_BIN" bash "$CI" --path "$SP" --shot-dir res://tests/kit_shots \
       --require-shots > "$CIS" 2>&1
     printf '\n=== KIT ci.sh --shot-dir --require-shots (Linux) without display and xvfb-run (expect FAIL)\n    exit=%s\n' $?
     grep -E '^   (PASS|FAIL|SKIP)  shot|^GODOT-CI' "$CIS" | sed 's/^ */    | /'

@@ -1,7 +1,6 @@
 """Render a terminal-style replay GIF from a JSON scene list.
 
 Usage: python render_gif.py scenes.json out.gif   (needs Pillow; fonts are the Windows Cascadia Mono)
-       python docs/demo/render_gif.py docs/demo/scenes.json docs/demo.gif
 
 scenes.json: {"title": str, "prompt": str, "events": [{"text": str, "style": str, "delay": ms}, ...], "hold": ms}
 Every text line comes verbatim from a recorded session; this script only lays it out and colours it.

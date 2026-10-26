@@ -30,7 +30,7 @@ Rendering facts that the golden comparison relies on:
 ## 1. Take the shot
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --out /tmp/shots/main.png                     # the project's main scene
+bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --out /tmp/shots/title.png                     # the project's main scene
 bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --scene res://ui/menu.tscn --size 1920x1080 --out /tmp/shots/menu.png
 ```
 
@@ -80,8 +80,8 @@ overlaps a button, that text is cut off, or that the wrong panel is open. So aft
 Write a golden only after you have looked at the shot and it is right:
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --out /tmp/shots/main.png --golden tests/shots/main.png --update-golden
-bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --out /tmp/shots/main.png --golden tests/shots/main.png
+bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --out /tmp/shots/title.png --golden tests/shots/title.png --update-golden
+bash "${CLAUDE_SKILL_DIR}/shot.sh" --path . --out /tmp/shots/title.png --golden tests/shots/title.png
 ```
 
 `--out` must be a different file from `--golden`, and `shot.sh` refuses the same path for both: the frame is
@@ -89,8 +89,8 @@ written first, so a shared path would compare the golden with itself.
 
 `--update-golden` writes two files:
 
-- `main.png`, the golden image;
-- `main.json`, with the scene, the size, and **who rendered it**: driver, GPU, graphics API version, engine version.
+- `title.png`, the golden image;
+- `title.json`, with the scene, the size, and **who rendered it**: driver, GPU, graphics API version, engine version.
 
 Inside the project it also writes a `.gdignore` next to them, so the editor does not import the goldens as textures.
 
