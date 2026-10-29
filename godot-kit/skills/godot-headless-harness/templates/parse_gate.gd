@@ -65,8 +65,12 @@ func _is_abstract(s: Script) -> bool:
 
 func _ready() -> void:
 	var min_count := MIN_SCRIPTS
-	if OS.has_environment("PARSE_GATE_MIN"):
-		min_count = OS.get_environment("PARSE_GATE_MIN").to_int()
+	var env_min := OS.get_environment("PARSE_GATE_MIN")
+	if env_min.is_valid_int():
+		min_count = env_min.to_int()
+	elif not env_min.is_empty():
+		# Not a number: to_int() would make it 0 and drop the floor without a word.
+		_broken.append("PARSE_GATE_MIN=%s (not a whole number)" % env_min)
 	for r in ROOTS:
 		_walk(r)
 	for b in _broken:

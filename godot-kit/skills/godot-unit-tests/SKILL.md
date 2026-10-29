@@ -23,6 +23,14 @@ Where the frameworks do report a failure, the exit code is right:
 - GUT exits 1 on a failing assert or a runtime error in a test.
 - gdUnit4 exits 100 for those, and 105 for a test file that does not parse.
 
+**The framework release must support your engine.** Measured on 4.4.1, 4.5.2 and 4.6.3 (Windows) with the same releases:
+- GUT 9.7.1 does not compile on any of them. On 4.5.2 and 4.6.3 the tests still run and raw GUT says
+  `All tests passed!` with exit 0, although two of GUT's own scripts failed to load.
+- gdUnit4 6.2.2 needs 4.5 or later (its plugin says so); on 4.5.2 and 4.6.3 it behaves as on 4.7.2.
+- On 4.4.1, neither framework's command-line runner compiles, and the engine hangs until the timeout kills it.
+`test_run.sh` reports every one of these as FAIL, and says so when only the framework's own scripts are broken: then
+install the framework release made for the project's Godot version instead of changing any test.
+
 **A passing test that expects an error still logs `ERROR: ...`** (`assert_push_error` in GUT,
 `assert_error(...).is_push_error(...)` in gdUnit4). So "any ERROR line = fail" is wrong for test runs.
 

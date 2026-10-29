@@ -15,7 +15,10 @@
 #     even with stdin closed (on Linux, stdin closed, --check-only crashed with 132 and the gate failed normally).
 #     So the gate runs normally first, and the --debug pass only after it passed, under a wall-clock timeout.
 #   - An un-awaited call to a coroutine warns only when the project enables debug/gdscript/warnings/missing_await,
-#     which is off by default. This script says so when it is off.
+#     which is off by default. This script says so when it is off. On 4.4.1 and 4.5.2 it gives no warning even when
+#     enabled (4.6.3 and 4.7.2 do warn); the script says that on engines older than 4.6.
+#   - Godot 4.4.1 prints the warnings of the --debug pass as `ERROR: '<message>'` lines without file or line: this
+#     script then FAILs (never CLEAN) and says it needs 4.5+.
 #
 # Last line and exit code:
 #   GODOT-WARN: CLEAN (...)      0   the gate passed and the --debug pass printed no warning (for the files asked)
@@ -84,6 +87,11 @@ bash "$HERE/gate.sh" --path "$PROJECT" --gate "$GATE" --no-import --debug --time
 rc=$?
 if [ $rc -ne 0 ]; then
   sed 's/^/  /' "$WORK/debug.out"
+  # Measured on 4.4.1: the --debug gate prints each warning as `ERROR: '<message>'`, with no file or line to map.
+  if tr -d '\r' < "$WORK/debug.log" | grep -q "^ERROR: '" && ! grep -q '^WARNING: ' "$WORK/debug.log"; then
+    echo "GODOT-WARN: FAIL (this engine prints warnings as ERROR lines without file:line - warnings.sh needs Godot 4.5+)"
+    exit 2
+  fi
   echo "GODOT-WARN: FAIL (the --debug run did not finish cleanly - log $WORK/debug.log)"
   exit 2
 fi
@@ -106,7 +114,12 @@ n=$(grep -c . "$WORK/found.txt")
 sed 's/^/  /' "$WORK/found.txt"
 
 ma=$(tr -d '\r' < "$PROJECT/project.godot" | sed -n 's/^gdscript\/warnings\/missing_await=\([0-9]\).*/\1/p' | tail -1)
-if [ "${ma:-0}" = 0 ]; then
+minor=$(tr -d '\r' < "$WORK/debug.log" | sed -n 's/^Godot Engine v4\.\([0-9]*\)\..*/\1/p' | head -1)
+if [ -n "$minor" ] && [ "$minor" -lt 6 ]; then
+  # Measured: 4.4.1 and 4.5.2 print no missing_await warning even with the setting on; 4.6.3 and 4.7.2 do.
+  echo "  note: Godot 4.$minor gives NO warning for an un-awaited call to a coroutine, even with"
+  echo "        debug/gdscript/warnings/missing_await enabled. Check such calls by hand."
+elif [ "${ma:-0}" = 0 ]; then
   echo "  note: debug/gdscript/warnings/missing_await is off (the default): an un-awaited call to a coroutine gives NO"
   echo "        warning here. Check such calls by hand, or enable it (Project Settings > Debug > GDScript)."
 fi

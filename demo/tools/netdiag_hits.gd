@@ -53,18 +53,25 @@ func _wait_until(cond: Callable, seconds := WAIT) -> bool:
 
 
 func _ready() -> void:
+	# An argument this harness does not know FAILS it: ignored, a typo would fall back to a default without a word.
+	var unknown: Array[String] = []
 	for a in OS.get_cmdline_user_args():
-		var kv := a.trim_prefix("--").split("=")
-		match kv[0]:
+		var kv := a.trim_prefix("--").split("=", true, 1)
+		match kv[0] if kv.size() == 2 else "":
 			"role": role = kv[1]
 			"port": port = int(kv[1])
 			"clients": clients = int(kv[1])
+			"client": pass  # net_run.sh numbers its clients; use it if one client must act differently
+			_: unknown.append(a)
 	_match = MATCH.instantiate()
 	add_child(_match)
-	match role:
-		"server": await _server()
-		"client": await _client()
-		_: _check("role given", false, "pass --role=server|client after `--`, got %s" % OS.get_cmdline_user_args())
+	if not unknown.is_empty():
+		_check("known arguments only", false, "unknown %s; net_run.sh passes --role= --port= --clients= --client=" % [unknown])
+	else:
+		match role:
+			"server": await _server()
+			"client": await _client()
+			_: _check("role given", false, "pass --role=server|client after `--`, got %s" % OS.get_cmdline_user_args())
 	var expected: int = EXPECTED.get(role, 0)
 	_check("all checks ran", _ran == expected, "ran %d of %d" % [_ran, expected])
 	var ok := _failed == 0

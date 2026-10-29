@@ -5,12 +5,12 @@ description: Run a Godot 4 project or scene headless and judge whether it REALLY
 
 # godot-run
 
-**A Godot exit code of 0 proves nothing.** All of these exit 0 (Godot 4.7.2, reproduced by the kit's
-`tests/measure_traps.sh`):
+**A Godot exit code of 0 proves nothing.** All of these exit 0 (Godot 4.7.2, and the same on 4.4.1, 4.5.2 and 4.6.3
+unless noted; reproduced by the kit's `tests/measure_traps.sh`):
 
 | What happened | Exit | Log |
 |---|---|---|
-| `--import` on a project with a hard syntax error | 0 | nothing at all |
+| `--import` on a project with a hard syntax error | 0 | nothing at all (4.4.1: the `SCRIPT ERROR`, still exit 0) |
 | scene whose own script does not parse | 0 | `SCRIPT ERROR`, then the scene runs as a bare node |
 | harness that forgot to `await` an async check | 0 | `PASS` banner, and a `FAIL` line *after* it |
 | scene run with `--user-data-dir` (a flag Godot 4 does not have) | 0 | empty: the scene never ran |

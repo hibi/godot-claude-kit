@@ -65,7 +65,8 @@ Each item was measured on Godot 4.7.2. Every one compiles, passes the parse gate
      wait: the caller runs on before the coroutine finishes.
    - In a harness this printed `PASS` and only then the `FAIL`. With a slow coroutine, the FAIL never printed at all.
    - The engine warns about it only when the project enables `debug/gdscript/warnings/missing_await`, which is off by
-     default. `warnings.sh` prints a note when it is off.
+     default, and on Godot 4.4.1 and 4.5.2 it gives no warning even when enabled. `warnings.sh` prints a note in
+     both cases.
    - When it is off, check by hand. For every function in the changed files that contains `await`, find its call
      sites (Grep `\bname\(`), and flag each call that is not preceded by `await` on the same line.
    - Also check the other direction: calls *from* the changed code to coroutines defined elsewhere.

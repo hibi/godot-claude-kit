@@ -38,19 +38,28 @@ In Godot 4 that proves nothing. Every row below exits **0**:
 
 | What happened | Exit | What the log shows |
 |---|---|---|
-| `--import` on a project with a hard syntax error | 0 | nothing at all |
+| `--import` on a project with a hard syntax error | 0 | nothing at all (4.5 and later; 4.4.1 prints the `SCRIPT ERROR`) |
 | a scene whose own script does not parse | 0 | `SCRIPT ERROR`, then the scene runs as a bare node |
 | a test harness that forgot to `await` a slow check | 0 | `PASS`, and the failing check never prints |
 | a test harness that counts a signal with `hits += 1` in a lambda | 0 | `ok`: a lambda captures a local by value, so `hits` stays 0 although the signal fired |
 | a run with `--user-data-dir` (Godot 4 has no such flag) | 0 | empty: the scene never ran |
 | a fresh clone run before `--import` | 0 | a false `Could not find type "<ClassName>"` |
 | a healthy scene that simply prints nothing | 0 | byte-identical to the "never ran" log above |
+| `--editor --quit` with an enabled add-on whose script does not compile | 0 | `SCRIPT ERROR`, and the editor starts anyway |
 
 There are also false alarms. For example, `--check-only --script` fails every *correct* script that uses an autoload.
 
+An add-on is a blind spot of its own. The kit's parse gate skips `res://addons/` (third-party code you do not fix),
+so it does not check the scripts of an add-on you are writing either, unless you say so: `gate.sh --include
+res://addons/<name>` (or the directory taken out of the gate scene's `SKIP`). Then a broken plugin script fails and a
+correct `EditorPlugin` passes. Run it on the oldest Godot version you support: an API that only exists in a newer
+version passes there and breaks on the old one.
+
 Godot's own GDScript warnings (unused variable, shadowing, integer division, unreachable code) never show up in a
 headless run unless you pass `--debug`. With `--debug`, a script that does not parse stops at a `debug>` prompt; on
-Windows the engine then hangs forever. The warning for calling a coroutine without `await` is off by default.
+Windows the engine then hangs forever. The warning for calling a coroutine without `await` is off by default, and on
+4.4.1 and 4.5.2 it does not fire even when switched on. On 4.4.1, `--debug` prints the warnings as `ERROR` lines
+without file or line, so `warnings.sh` needs 4.5 or later.
 
 Multiplayer is worse. Both of these leave server and client exiting 0:
 
@@ -67,6 +76,11 @@ Unit-test frameworks are not immune either. Measured with GUT 9.7.1:
 gdUnit4 6.2.2 exits 0 on `No test cases found`. With `-d` and a broken test file it hangs forever at a `debug>` prompt
 on Windows. On Linux it usually prints `Abnormal exit with 105` but exits 0 (3 of 4 measured runs); the fourth hung
 the same way.
+
+Both releases also depend on the engine version. GUT 9.7.1 does not compile on 4.4.1, 4.5.2 or 4.6.3. On 4.5 and 4.6
+the tests still run and GUT reports them passed, although two of its own scripts failed to load. gdUnit4 6.2.2 needs
+4.5 or later. On 4.4.1, neither framework's command-line runner compiles, and the engine then hangs until a timeout
+kills it. `test_run.sh` reports all of these as FAIL and says when only the framework's own scripts are broken.
 
 Screenshots are a trap of their own. `--headless` never draws a frame:
 
@@ -118,7 +132,8 @@ The skills are then available as `/godot-kit:godot-run`, `/godot-kit:godot-headl
 
 **Requirements:**
 
-- Godot 4.x. The kit was measured on 4.7.2.
+- Godot 4.4 or later. Measured on 4.4.1, 4.5.2, 4.6.3 and 4.7.2 on Windows and Linux; on GitHub Actions on 4.7.2.
+  `warnings.sh` needs 4.5 or later. GUT and gdUnit4 must be releases that support your engine (see above).
 - `bash`. On Windows that is Git Bash, which Claude Code already uses.
 - The engine binary as `GODOT_BIN`, or `godot` on `PATH`. On Windows, use the `*_console.exe` build.
 
@@ -188,6 +203,7 @@ It answers a different question: *did that run really prove what the agent claim
 | Platform | Engine | What ran |
 |---|---|---|
 | Windows 10, Git Bash and PowerShell 5.1 | 4.7.2 stable, GUT 9.7.1, gdUnit4 6.2.2; screenshots on an NVIDIA GPU (Vulkan and OpenGL) | `measure_traps.sh`: every trap above, the multiplayer, test-framework and screenshot traps, and each sabotage case of the runner, gate, harnesses, `net_run.sh`, `rpc_check.sh`, `test_run.sh`, `shot.sh` and `ci.sh` |
+| Windows 10 and Linux (Debian, WSL2) | 4.4.1, 4.5.2 and 4.6.3 stable (official builds); GUT 9.7.1 and gdUnit4 6.2.2 on Windows only | `measure_traps.sh`, the same set. Every engine trap, runner, gate, harness, multiplayer, RPC, screenshot and CI case gives the 4.7.2 result, except where noted above: `--import` output on 4.4.1, the warnings on 4.4.1 and 4.5.2, and the test frameworks |
 | Linux (Debian, WSL2) | 4.7.2 stable (official Linux build), GUT 9.7.1, gdUnit4 6.2.2; screenshots under xvfb with Mesa llvmpipe | `measure_traps.sh`, the same set (the Windows-only PowerShell traps skip themselves), and the generated workflow's steps executed verbatim |
 | GitHub Actions, `ubuntu-latest` | 4.7.2 stable; screenshots under xvfb with Mesa llvmpipe | the kit's own workflow on every push: `ci.sh` on the demo, including a screenshot compared with a golden rendered on that runner (`--require-shots`) |
 

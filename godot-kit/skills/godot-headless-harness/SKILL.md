@@ -30,6 +30,7 @@ banner. Use it to check a project you should not modify, or before deciding to s
 ```bash
 bash "${CLAUDE_SKILL_DIR}/gate.sh" --path .              # last line: the runner's GODOT-RUN verdict
 bash "${CLAUDE_SKILL_DIR}/gate.sh" --path . --min 40     # script gate: fewer than 40 scripts fails
+bash "${CLAUDE_SKILL_DIR}/gate.sh" --path . --include res://addons/my_tool   # script gate: check the add-on you write
 ```
 
 `ci.sh` (skill `godot-ci`) does the same: it runs the gate scene when there is one, else this script gate, and
@@ -54,15 +55,23 @@ bash "${CLAUDE_SKILL_DIR}/scaffold.sh" --path . harness enemy_ai  # res://tools/
    or only half the project, can never read as a pass.
 3. Add third-party code and broken-on-purpose fixtures to `SKIP`. `res://addons` is already there. A directory that
    holds a `.gdignore` is skipped automatically.
+   If the project IS an add-on (its code lives under `res://addons/<name>/`), the gate does not check that code: take
+   that directory out of `SKIP` and keep only the third-party ones there (script gate: `gate.sh --include
+   res://addons/<name>`; with a gate scene `--include` is refused, so it can never be silently ignored). Measured: an enabled add-on whose script
+   does not compile leaves `--headless --editor --quit` at exit 0 with a `SCRIPT ERROR` (trap T18), and the gate
+   with `res://addons` skipped says PASS. With the add-on's directory out of `SKIP`, the gate FAILs on it, and a
+   correct `@tool extends EditorPlugin` script passes: editor classes compile in the gate's plain scene run (measured
+   on 4.4.1 and 4.7.2). Run it on the oldest Godot version you support too.
 
 **After you scaffold a harness:** it fails on purpose until you replace its placeholder with real checks. A harness
 that passes before anyone wrote a check is a lie.
 
 ## 2. Why the gate runs inside the project
 
-These were measured on Godot 4.7.2 with the kit's `tests/measure_traps.sh`:
+These were measured on Godot 4.7.2 with the kit's `tests/measure_traps.sh` (and on 4.4.1, 4.5.2 and 4.6.3):
 
-- **`--import` does not parse scripts.** A hard syntax error, or `Vector2.ZERO.z`, passes it with exit 0 and no output.
+- **`--import` does not parse scripts.** A hard syntax error, or `Vector2.ZERO.z`, passes it with exit 0 and no output
+  (4.4.1 prints the `SCRIPT ERROR`, but still exits 0).
 - **`--check-only --script <file>` lies the other way.** It does catch both errors. But it also fails every
   *correct* script that names an autoload (`Identifier not found: GameState`).
 - **Scripts loaded by a running project see the autoloads.** That holds for the gate scene and for the script gate
@@ -130,14 +139,17 @@ never leave one behind.
 ## 5. GDScript warnings
 
 The gate answers "does it compile". The engine's GDScript warnings answer "does it do what it looks like": an unused
-variable, a shadowed one, integer division, a standalone expression, unreachable code. Measured on Godot 4.7.2:
+variable, a shadowed one, integer division, a standalone expression, unreachable code. Measured on Godot 4.7.2 (and
+4.5.2, 4.6.3; `warnings.sh` needs 4.5 or later - 4.4.1 prints the warnings as `ERROR: '<message>'` lines without
+file or line, and `warnings.sh` then FAILs):
 
 - **Without `--debug` the engine prints no warnings at all.** `--check-only` exits 0 silently, and the gate says PASS.
 - **With `--debug`, a script that does not parse stops at a `debug>` prompt.**
   - On Windows the engine never exits, even with stdin closed; both `--check-only` and the gate hung.
   - On Linux, with stdin closed, `--check-only` crashed (exit 132), and the gate went on and failed normally.
 - **An un-awaited call to a coroutine** (`slow()` where `slow` contains `await`) warns only when the project enables
-  `debug/gdscript/warnings/missing_await`, and that setting is **off** by default. Using such a call's return value
+  `debug/gdscript/warnings/missing_await`, and that setting is **off** by default. On 4.4.1 and 4.5.2 it gives no
+  warning even when enabled (4.6.3 and 4.7.2 do). Using such a call's return value
   without `await` is a parse error, so the gate catches that case.
 - **A lambda that assigns a captured local** (rule 9 of section 3) warns with `--debug`: `Reassigning lambda capture
   does not modify the outer local variable "hits"`. The other direction, a local reassigned after the lambda was
@@ -153,7 +165,8 @@ bash "${CLAUDE_SKILL_DIR}/warnings.sh" --path . src/player.gd src/hud.gd  # only
 1. It runs the gate normally: the project's gate scene, or the script gate when there is none (see the top).
 2. Only after a PASS does it run the gate again with `--debug`, under a wall-clock timeout.
 3. It prints each warning as `res://file.gd:LINE: message`, skipping `res://addons/`.
-4. If `missing_await` is off, it adds a note saying so. Un-awaited coroutine calls then have to be checked by hand.
+4. If `missing_await` is off, or the engine is older than 4.6, it adds a note saying so. Un-awaited coroutine calls
+   then have to be checked by hand.
 
 | Last line | Exit | Meaning |
 |---|---|---|

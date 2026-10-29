@@ -91,6 +91,27 @@ show "T17 harness reading locals through lambdas" $? "$WORK/logs/t17_lambda.log"
 tr -d '\r' < "$WORK/logs/t17_lambda.log" | grep '^TRAP:' | sed 's/^/    | /'
 cleanup; import
 
+# T18 - an ENABLED editor plugin whose script does not compile, on a demo copy: the editor run, and the kit's gate,
+# which skips res://addons (third-party code) - so an add-on's own scripts are never checked by it.
+AP="$WORK/addon"; rm -rf "$AP"; cp -r "$DEMO" "$AP"; rm -rf "$AP/.godot"; mkdir -p "$AP/addons/addon_probe"
+printf '[plugin]\n\nname="addon_probe"\ndescription="probe"\nauthor="probe"\nversion="0.1"\nscript="plugin.gd"\n' \
+  > "$AP/addons/addon_probe/plugin.cfg"
+cp "$FIX/addon_plugin.gd" "$AP/addons/addon_probe/plugin.gd"
+printf '\n[editor_plugins]\n\nenabled=PackedStringArray("res://addons/addon_probe/plugin.cfg")\n' >> "$AP/project.godot"
+godot --headless --path "$AP" --import > "$WORK/logs/t18_import.log" 2>&1
+godot --headless --editor --path "$AP" --quit > "$WORK/logs/t18_editor.log" 2>&1
+show "T18 --headless --editor --quit with the add-on's plugin script broken" $? "$WORK/logs/t18_editor.log"
+godot --headless --path "$AP" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t18_gate.log" 2>&1
+show "T18 the kit's parse gate on that project" $? "$WORK/logs/t18_gate.log"
+# An add-on author takes their own directory out of SKIP: does the gate (a scene run, not the editor) then judge
+# editor-plugin code both ways?
+sed -i 's|^const SKIP := \["res://addons"\]|const SKIP := ["res://addons/gut", "res://addons/gdUnit4"]|' "$AP/tools/ci/parse_gate.gd"
+godot --headless --path "$AP" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t18_gate_in.log" 2>&1
+show "T18 the gate with res://addons/addon_probe no longer skipped (expect FAIL naming plugin.gd)" $? "$WORK/logs/t18_gate_in.log"
+cp "$FIX/addon_plugin_ok.gd" "$AP/addons/addon_probe/plugin.gd"
+godot --headless --path "$AP" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t18_gate_ok.log" 2>&1
+show "T18 the same with a CORRECT EditorPlugin script (expect PASS 8 scripts)" $? "$WORK/logs/t18_gate_ok.log"
+
 # T15 - does the example harness bite? Break the code under test (Health.damage stops clamping), then restore it.
 cp "$DEMO/src/health.gd" "$WORK/health.gd.orig"; cp "$FIX/health_no_clamp.gd" "$DEMO/src/health.gd"
 godot --headless --path "$DEMO" --quit-after 600 res://tools/diag_health.tscn > "$WORK/logs/t15_health_no_clamp.log" 2>&1
@@ -342,6 +363,12 @@ cp "$WORK/netdiag_hits.orig" "$H"
 sed -i '/^@rpc("authority", "call_remote", "reliable")$/d' "$M"
 net_case "game code: @rpc removed from sync_hp (expect FAIL)" --port $((NP + 14))
 cp "$WORK/net_match.orig" "$M"
+# The harness started by hand with a typo in its own args (net_run.sh only ever passes the known four).
+GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$NETC" --no-import \
+  --banner '^NETDIAG-HITS-SERVER: PASS' res://tools/netdiag_hits.tscn -- --role=server --prot=$((NP + 16)) \
+  > "$WORK/logs/net_typo.out" 2>&1
+printf '\n=== KIT netdiag_hits server, user arg --prot typo (expect FAIL known arguments only)\n    exit=%s\n' $?
+grep -E 'known arguments|^GODOT-RUN' "$WORK/logs/net_typo.out" | tr -d '\r' | sed 's/^ */    | /'
 timeout 60 "$GODOT_BIN" --headless --path "$NETC" --script res://_hold_udp_port.gd -- --port=$((NP + 15)) --seconds=40 \
   > "$WORK/logs/net_hold.log" 2>&1 & hold=$!
 sleep 1
@@ -641,6 +668,15 @@ if can_draw; then
 else
   printf '\n=== KIT shot.sh drawing cases: SKIPPED (no display and no xvfb-run)\n'
 fi
+# Kit: shot_capture.gd called straight through the runner with a typo or a bad value. The argument check runs
+# before the display check, so this needs no display. Ignored, a typo would leave the compare limit at its default.
+for ua in --max_rmse=0.1 --settle=x --max-rmse=abc; do
+  GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$SP" --no-import --banner '^SHOT: PASS' \
+    -- --script "$(nat "$ROOT/godot-kit/skills/godot-screenshot/shot_capture.gd")" ++ --scene=res://src/main.tscn \
+    --out="$(nat "$WORK/shots/k_typo.png")" --size=64x64 "$ua" > "$WORK/logs/shot_typo.out" 2>&1
+  printf '\n=== KIT shot_capture.gd direct, user arg %s (expect FAIL)\n    exit=%s\n' "$ua" $?
+  grep -E 'FAIL (unknown|--settle)|^GODOT-RUN' "$WORK/logs/shot_typo.out" | tr -d '\r' | sed 's/^ */    | /' | head -3
+done
 if [ "$(uname -s)" = Linux ]; then
   # No display and no xvfb-run: a PATH with every system tool except xvfb-run and Xvfb.
   NOX="$WORK/nopath"; rm -rf "$NOX"; mkdir -p "$NOX"
@@ -774,7 +810,35 @@ mkdir -p "$GN/addons/thirdparty" "$GN/src/fixtures"; : > "$GN/src/fixtures/.gdig
 cp "$FIX/syntax_error.gd" "$GN/addons/thirdparty/broken.gd"; cp "$FIX/syntax_error.gd" "$GN/src/fixtures/broken.gd"
 gcase "broken scripts only in addons/ and a .gdignore dir (expect PASS)" "$GN"
 gcase "--min 99 (expect FAIL: only 5 scripts)" "$GN" --no-import --min 99
+# The add-on being written lives in addons/ too: --include checks it, the broken third-party add-on stays skipped.
+mkdir -p "$GN/addons/my_tool"; cp "$FIX/addon_plugin_ok.gd" "$GN/addons/my_tool/plugin.gd"
+gcase "--include res://addons/my_tool, correct EditorPlugin (expect PASS 6 scripts)" "$GN" --include res://addons/my_tool
+cp "$FIX/addon_plugin.gd" "$GN/addons/my_tool/plugin.gd"
+gcase "the same, that plugin broken (expect FAIL naming my_tool/plugin.gd)" "$GN" --no-import --include res://addons/my_tool
+gcase "the same without --include (expect PASS 5 scripts: the blind spot)" "$GN" --no-import
+gcase "--include of a directory that does not exist (expect FAIL)" "$GN" --no-import --include res://addons/my_tol
+rm -rf "$GN/addons/my_tool"
 gcase "demo with its own gate scene (expect the scene, PASS)" "$WP" --no-import
+gcase "the gate scene with --include (expect FAIL: refused, not ignored)" "$WP" --no-import --include res://src
+# The script gate called straight through the runner (gate.sh refuses unknown flags itself): a typo or a bad value
+# in its own args or in PARSE_GATE_MIN; then the gate scene with PARSE_GATE_MIN=abc.
+SG="$(nat "$ROOT/godot-kit/skills/godot-headless-harness/parse_gate_script.gd")"
+for ua in --mn=99 --skip=src --min=abc env; do
+  if [ "$ua" = env ]; then
+    PARSE_GATE_MIN=abc GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$GN" --no-import \
+      --banner '^PARSE-GATE: PASS' -- --script "$SG" > "$WORK/logs/gate_typo.out" 2>&1
+  else
+    GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$GN" --no-import \
+      --banner '^PARSE-GATE: PASS' -- --script "$SG" ++ "$ua" > "$WORK/logs/gate_typo.out" 2>&1
+  fi
+  rc=$?; what="user arg $ua"; [ "$ua" = env ] && what="PARSE_GATE_MIN=abc"
+  printf '\n=== KIT parse_gate_script.gd direct, %s (expect FAIL)\n    exit=%s\n' "$what" $rc
+  grep -E 'PARSE-GATE|  FAIL  |^GODOT-RUN' "$WORK/logs/gate_typo.out" | tr -d '\r' | sed 's/^ */    | /' | head -3
+done
+PARSE_GATE_MIN=abc GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$WP" --no-import \
+  --banner '^PARSE-GATE: PASS' res://tools/ci/parse_gate.tscn > "$WORK/logs/gate_typo.out" 2>&1
+printf '\n=== KIT the demo gate scene with PARSE_GATE_MIN=abc (expect FAIL)\n    exit=%s\n' $?
+grep -E 'PARSE-GATE|  FAIL  |^GODOT-RUN' "$WORK/logs/gate_typo.out" | tr -d '\r' | sed 's/^ */    | /' | head -3
 cp "$FIX/warn_cases.gd" "$GN/src/_warn.gd"
 GODOT_BIN="$GODOT_BIN" bash "$WARN" --path "$GN" > "$WORK/logs/warn.out" 2>&1
 printf '\n=== KIT warnings.sh on the project without a gate scene, six-warning script (expect FOUND 6)\n    exit=%s\n' $?

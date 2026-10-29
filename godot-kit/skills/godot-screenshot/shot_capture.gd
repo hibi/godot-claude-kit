@@ -16,6 +16,15 @@ func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
+	# An unknown or malformed argument FAILS the shot: ignored, a typo like `--max_rmse=0.1` would leave the limit at 0.5.
+	for k in args:
+		if not k in ["scene", "out", "size", "settle", "golden", "max-rmse", "update-golden"]:
+			_finish("FAIL unknown argument --%s (see the header of shot_capture.gd)" % k)
+			return
+	if not str(args.get("settle", "10")).is_valid_int() or not str(args.get("max-rmse", "0.5")).is_valid_float():
+		_finish("FAIL --settle must be an integer and --max-rmse a number, got '%s' / '%s'"
+				% [args.get("settle", ""), args.get("max-rmse", "")])
+		return
 	var scene_path: String = args.get("scene", "")
 	var out: String = args.get("out", "")
 	var size_s: String = args.get("size", "")

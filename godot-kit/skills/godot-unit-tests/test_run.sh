@@ -116,9 +116,15 @@ tr -d '\r' < "$OUT/test.log" | sed 's/\x1b\[[0-9;]*m//g' > "$CLEAN"
 why=()
 grep -q 'wall-clock timeout' "$OUT/runner.out" && why+=("wall-clock timeout ${TIMEOUT_S}s")
 if grep -qE 'Parse Error|Compile Error' "$CLEAN"; then
-  broken=$(grep -oE 'Failed to load script "res://[^"]+"|GDScript::reload \(res://[^:)]+' "$CLEAN" | grep -oE 'res://[^":)]+' \
-    | sort -u | head -3 | tr '\n' ' ')
+  all_broken=$(grep -oE 'Failed to load script "res://[^"]+"|GDScript::reload \(res://[^:)]+' "$CLEAN" \
+    | grep -oE 'res://[^":)]+' | sort -u)
+  broken=$(printf '%s\n' "$all_broken" | grep . | head -3 | tr '\n' ' ')
   why+=("a script does not compile: ${broken:-see log}")
+  # Measured: GUT 9.7.1 does not compile on 4.4.1-4.6.3 (on 4.5/4.6 the tests still run and raw GUT says "passed"),
+  # gdUnit4 6.2.2 not on 4.4.1 (its CLI then hangs until the timeout).
+  if [ -n "$all_broken" ] && ! printf '%s\n' "$all_broken" | grep -qvE '^res://addons/(gut|gdUnit4)/'; then
+    why+=("only the framework's own scripts fail: this $FW release does not support this engine - install the one made for your Godot version")
+  fi
 fi
 if [ "$FW" = gut ]; then
   [ "${code:-x}" = 0 ] || why+=("GUT exit ${code:-?}")
