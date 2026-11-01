@@ -18,7 +18,7 @@ exit code, never the exit code alone):
    Both must print `NETDIAG-<NAME>-SERVER|CLIENT: PASS`.
 
 5. The **unit tests** (GUT or gdUnit4), through `test_run.sh` (skill `godot-unit-tests`). They run when a framework is
-   installed under `addons/` and the test directory is known: `--test-dir res://...`, or `"dirs"` in GUT's
+   installed under `addons/` and the test directory is known: `--test-dir res://test`, or `"dirs"` in GUT's
    `.gutconfig.json`. A framework without a known directory shows a visible `SKIP` row, and the PASS line says
    `unit tests SKIPPED`.
 6. The **golden screenshots**, when you pass `--shot-dir res://tests/shots`: every `<name>.png` with a `<name>.json`
@@ -50,9 +50,9 @@ Other options:
   to the script gate: a typo must not quietly swap the check).
 - `--frames N` / `--timeout S`: passed through to every run.
 - `--out <dir>`: where the per-run logs go. A fresh temp dir by default; the path is printed either way.
-- `--test-dir res://...` (repeatable), `--test-framework gut|gdunit` (when both are installed) and `--min-tests N`
+- `--test-dir res://test` (repeatable), `--test-framework gut|gdunit` (when both are installed) and `--min-tests N`
   (default 1) go to the unit-test run.
-- `--shot-dir res://...`: the directory of golden screenshots, written by `shot.sh --update-golden`.
+- `--shot-dir res://tests/shots`: the directory of golden screenshots, written by `shot.sh --update-golden`.
 - `--require-shots`: every golden must really be compared. No display, or a golden from another renderer (for example
   after a CI image update changed the Mesa version), is then a FAIL instead of a SKIP or a "not compared" note.
 - `--candidates <dir>`: for every golden that failed or was not compared, shoot a fresh golden (`<name>.png` +

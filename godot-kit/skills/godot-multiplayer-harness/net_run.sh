@@ -15,7 +15,7 @@
 #   --out DIR        keep the logs here (default: a fresh temp dir; printed either way)
 #
 # Each process gets the user args `-- --role=server|client --port=P --clients=N [--client=i]`.
-# Banners: NETDIAG-<NAME>-SERVER: PASS / NETDIAG-<NAME>-CLIENT: PASS (scene res://.../netdiag_<name>.tscn).
+# Banners: NETDIAG-<NAME>-SERVER: PASS / NETDIAG-<NAME>-CLIENT: PASS (the scene is a res:// path ending in netdiag_<name>.tscn).
 #
 # Last line and exit code:
 #   GODOT-NET: PASS (server + N client(s))   0
@@ -41,7 +41,7 @@ done
 base=$(basename "${SCENE:-x}" .tscn)
 case "$base" in
   netdiag_*) ;;
-  *) echo "GODOT-NET: FAIL (scene must be res://.../netdiag_<name>.tscn, got '$SCENE')"; exit 1 ;;
+  *) echo "GODOT-NET: FAIL (scene must be a res:// path ending in netdiag_<name>.tscn, got '$SCENE')"; exit 1 ;;
 esac
 [ -f "$PROJECT/${SCENE#res://}" ] || { echo "GODOT-NET: FAIL ($SCENE does not exist)"; exit 1; }
 NAME=$(printf '%s' "${base#netdiag_}" | tr 'a-z' 'A-Z')

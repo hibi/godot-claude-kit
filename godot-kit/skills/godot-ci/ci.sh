@@ -242,7 +242,7 @@ if [ -f "$PROJECT/$GUT_TOOL" ] || [ -f "$PROJECT/$GDU_TOOL" ]; then
   if [ ! -f "$TESTRUN" ]; then
     RESULTS+=("SKIP  unit  tests (test_run.sh not found next to ci.sh or in ../godot-unit-tests/)"); UNIT="SKIPPED"
   elif [ $TESTDIRS = 0 ] && [ $gutdirs = 0 ]; then
-    RESULTS+=("SKIP  unit  tests (a test framework is installed, but no test directory: pass --test-dir res://...)")
+    RESULTS+=("SKIP  unit  tests (a test framework is installed, but no test directory: pass --test-dir with it, e.g. --test-dir res://test)")
     UNIT="SKIPPED"
   else
     n=$((n + 1))

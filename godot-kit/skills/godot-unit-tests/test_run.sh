@@ -67,7 +67,7 @@ if [ ${#DIRS[@]} -eq 0 ] && [ "$FW" = gut ] && [ -f "$PROJECT/.gutconfig.json" ]
   while IFS= read -r d; do DIRS+=("$d"); done < <(tr -d '\r\n' < "$PROJECT/.gutconfig.json" \
     | sed -n 's/.*"dirs"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' | grep -o '"res://[^"]*"' | tr -d '"')
 fi
-[ ${#DIRS[@]} -gt 0 ] || fail "no test directory: pass --dir res://<dir> (GUT also reads \"dirs\" from res://.gutconfig.json)"
+[ ${#DIRS[@]} -gt 0 ] || fail "no test directory: pass --dir with it, e.g. --dir res://test (GUT also reads \"dirs\" from res://.gutconfig.json)"
 for d in "${DIRS[@]}"; do
   case "$d" in res://*) ;; *) fail "--dir must be a res:// path, got '$d'" ;; esac
   [ -d "$PROJECT/${d#res://}" ] || fail "test directory $d does not exist (both frameworks call that 0 tests and exit 0)"

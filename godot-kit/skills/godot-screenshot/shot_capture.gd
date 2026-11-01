@@ -38,7 +38,7 @@ func _initialize() -> void:
 		_finish("FAIL needs a display: this run is --headless, which never draws a frame")
 		return
 	if scene_path.is_empty() or out.is_empty() or not "x" in size_s:
-		_finish("FAIL usage: --scene=res://... --out=<png> --size=WxH")
+		_finish("FAIL usage: --scene=<res:// path of a .tscn> --out=<png> --size=WxH")
 		return
 	var want := Vector2i(int(size_s.get_slice("x", 0)), int(size_s.get_slice("x", 1)))
 	var packed := load(scene_path) as PackedScene
