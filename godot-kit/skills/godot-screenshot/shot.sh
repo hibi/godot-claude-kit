@@ -27,7 +27,7 @@
 #   GODOT-SHOT: UNVERIFIED (why)    2   frame fine, but the golden was rendered by another driver/GPU: not compared
 #   GODOT-SHOT: NO-ENGINE           3   set GODOT_BIN
 #   GODOT-SHOT: NO-DISPLAY          4   Linux without a display or xvfb-run: nothing can be rendered here
-# PASS proves the frame is not broken, not that it looks RIGHT: open the PNG and look at it.
+# PASS proves the frame is not broken, not that it looks RIGHT: open the PNG and look at the frame yourself.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -89,7 +89,7 @@ if [ -n "$GOLDEN" ]; then
 fi
 
 # --audio-driver Dummy: a screenshot needs no sound, and a CI runner with ALSA but no sound card logs
-# `ERROR: ... ERR_CANT_OPEN` (init_output_device) on every drawing run - a good frame would FAIL on it. Measured.
+# `ERROR: ... ERR_CANT_OPEN` (init_output_device) on every drawing run - a good frame would FAIL on that line. Measured.
 WRAP=() ENGINE_ARGS=(--resolution "$SIZE" --audio-driver Dummy)
 if [ "$(uname -s)" = Linux ]; then
   if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then

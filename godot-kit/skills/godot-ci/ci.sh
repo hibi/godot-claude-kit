@@ -102,7 +102,7 @@ if [ "${ARGS[0]:-}" = install ]; then
     GVER=$("$BIN" --version 2>/dev/null | tr -d '\r' | sed -nE 's/^([0-9]+\.[0-9]+(\.[0-9]+)?)\.([a-z0-9]+)\..*/\1-\3/p')
     [ -n "$GVER" ] || { echo "install: cannot read the engine version - pass --godot-version (e.g. 4.7.2-stable)"; exit 1; }
   fi
-  # The workflow lives at the repository root; the project may sit in a subdirectory of it.
+  # The workflow lives at the repository root, and the project may sit in a subdirectory below that root.
   root=$(git -C "$PROJECT" rev-parse --show-toplevel 2>/dev/null) || root=""
   if [ -n "$root" ]; then
     # Ask git for the prefix: comparing paths breaks where one directory has two spellings (Git Bash: /tmp = %TEMP%).
@@ -258,7 +258,7 @@ if [ -f "$PROJECT/$GUT_TOOL" ] || [ -f "$PROJECT/$GDU_TOOL" ]; then
   fi
 fi
 
-# Golden screenshots: re-shoot each <name>.png that has a <name>.json (scene + size) next to it.
+# Golden screenshots: re-shoot each golden image whose <name>.json (scene + size) sits in the same directory.
 SHOTS="none" ns=0 nsu=0
 if [ -z "$SHOTDIR" ] && [ $REQ_SHOTS = 1 ]; then
   RESULTS+=("FAIL  shot  --require-shots without --shot-dir"); failed+=("shots"); n=$((n + 1))

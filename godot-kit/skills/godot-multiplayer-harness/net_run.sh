@@ -2,7 +2,7 @@
 # net_run.sh - run a two-process multiplayer harness headless: ONE server and N clients, each its own isolated engine
 # judged by godot_run.sh, and PASS only when EVERY process passed. An RPC error lands in one side's log only (the
 # sender's for a call to a non-@rpc function, the receiver's for a node path the other side does not have), so
-# judging one log - or the exit codes, which stay 0 - misses it.
+# judging one log - or the exit codes, which stay 0 - misses the failure.
 #
 #   bash net_run.sh --path <project> [options] res://tools/netdiag_<name>.tscn
 #

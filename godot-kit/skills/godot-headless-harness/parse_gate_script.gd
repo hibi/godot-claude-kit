@@ -27,7 +27,7 @@ var _logger: Object = null
 
 func _walk(dir: String) -> void:
 	if dir in _skip:
-		# A skipped directory is not walked, except the --include directories below it.
+		# A skipped directory is not walked, except for the --include directories inside that directory.
 		for inc in _include:
 			if inc.begins_with(dir + "/"):
 				_walk(inc)
