@@ -13,7 +13,8 @@
 #   --import-only          run only the isolated `--import` and stop (GODOT-RUN: IMPORTED). For several processes
 #                          on one project: import once, then start each of them with --no-import - parallel
 #                          imports would write the same .godot/ cache at once.
-#   --allow-engine-errors  report `ERROR:` lines instead of failing on them (SCRIPT ERROR / Parse Error always fail).
+#   --allow-engine-errors  report `ERROR:` lines instead of failing on them (SCRIPT ERROR / SHADER ERROR / Parse Error
+#                          always fail).
 #   --log FILE             where to keep the run log (default: a fresh temp dir; the path is printed either way).
 #   --home DIR             use DIR as the isolated APPDATA/HOME and KEEP it (default: a throwaway dir, deleted after
 #                          the run) - for a caller that needs what the run wrote to user://, e.g. test reports.
@@ -23,7 +24,7 @@
 # Engine binary: $GODOT_BIN, else `godot` on PATH. Nothing is hard-coded.
 #
 # Last line and exit code:
-#   GODOT-RUN: PASS          0   banner found, engine exit 0, no SCRIPT ERROR / Parse Error / ERROR / FAIL line
+#   GODOT-RUN: PASS          0   banner found, engine exit 0, no SCRIPT/SHADER ERROR / Parse Error / ERROR / FAIL line
 #   GODOT-RUN: FAIL (why)    1
 #   GODOT-RUN: UNVERIFIED    2   no --banner given and nothing went wrong - which proves nothing ran either
 #   GODOT-RUN: NO-ENGINE     3   no binary found: set GODOT_BIN
@@ -102,13 +103,14 @@ drop_home
 CLEAN="$WORK/run.clean.log"
 tr -d '\r' < "$LOG" > "$CLEAN"
 echo "run:     exit $code, $(grep -c . "$CLEAN") non-empty lines, log $(show_path "$LOG")"
-grep -nE 'SCRIPT ERROR|Parse Error|Compile Error|^ERROR:|^[[:space:]]*FAIL\b|^[[:space:]]*ok\b|PASS|CrashHandler|signal [0-9]+' "$CLEAN" \
+grep -nE 'SCRIPT ERROR|SHADER ERROR|Parse Error|Compile Error|^ERROR:|^[[:space:]]*FAIL\b|^[[:space:]]*ok\b|PASS|CrashHandler|signal [0-9]+' "$CLEAN" \
   | head -40 | sed 's/^/  | /'
 
 why=""
 [ $code -eq 124 ] && why="$why; wall-clock timeout ${TIMEOUT_S}s"
 [ $code -ne 0 ] && [ $code -ne 124 ] && why="$why; engine exit $code"
 grep -qE 'SCRIPT ERROR|Parse Error|Compile Error' "$CLEAN" && why="$why; script error in log"
+grep -qE 'SHADER ERROR' "$CLEAN" && why="$why; shader error in log"
 if grep -qE '^ERROR:' "$CLEAN"; then
   if [ $ALLOW_ERRORS = 1 ]; then echo "  note: $(grep -cE '^ERROR:' "$CLEAN") ERROR: line(s) allowed by --allow-engine-errors"
   else why="$why; ERROR: line in log"; fi

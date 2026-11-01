@@ -700,6 +700,79 @@ if [ "$(uname -s)" = Linux ]; then
   fi
 fi
 
+# T19 - a .gdshader that does not compile, on its own demo copy. FXS is a scene that draws main.tscn and, over it, a
+# full-screen ColorRect whose ShaderMaterial uses the shader under test (res://fx/fx.gdshader, swapped per case).
+FX="$WORK/fx"; rm -rf "$FX"; cp -r "$DEMO" "$FX"; rm -rf "$FX/.godot"; mkdir -p "$FX/fx"
+printf '%s\n' '[gd_scene load_steps=4 format=3]' '' '[ext_resource type="PackedScene" path="res://src/main.tscn" id="1"]' \
+  '[ext_resource type="Shader" path="res://fx/fx.gdshader" id="2"]' '' '[sub_resource type="ShaderMaterial" id="m"]' \
+  'shader = ExtResource("2")' '' '[node name="Root" type="Node"]' '' '[node name="Main" parent="." instance=ExtResource("1")]' '' \
+  '[node name="FX" type="CanvasLayer" parent="."]' 'layer = 5' '' '[node name="Rect" type="ColorRect" parent="FX"]' \
+  'material = SubResource("m")' 'anchors_preset = 15' 'anchor_right = 1.0' 'anchor_bottom = 1.0' > "$FX/fx/fx.tscn"
+SPROBE=$(nat "$FIX/shader_probe.gd")
+winfx() { ${XV[@]+"${XV[@]}"} "$GODOT_BIN" --path "$FX" ${POS[@]+"${POS[@]}"} --audio-driver Dummy "$@"; }   # win() on this copy
+xshow() {  # xshow <label> <exit> <log>
+  printf '\n=== %s\n    exit=%s, SHADER ERROR lines: %s, ERROR lines: %s\n' "$1" "$2" "$(grep -c '^SHADER ERROR' "$3")" "$(grep -c '^ERROR' "$3")"
+  grep -E '^SHADER ERROR|^ERROR|^ +at: \(null\)|^probe: image|PARSE-GATE|  FAIL  |  shader  ' "$3" | tr -d '\r' | sed 's/^ */    | /' | head -6
+}
+cp "$FIX/shader_return.gdshader" "$FX/fx/fx.gdshader"
+godot --headless --path "$FX" --import > "$WORK/logs/t19_import.log" 2>&1
+xshow "T19 --import with a shader that does not compile (return in fragment)" $? "$WORK/logs/t19_import.log"
+godot --headless --path "$FX" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t19_gate.log" 2>&1
+xshow "T19 the kit's parse gate (expect FAIL naming fx.gdshader:11)" $? "$WORK/logs/t19_gate.log"
+godot --headless --path "$FX" --quit-after 60 res://fx/fx.tscn > "$WORK/logs/t19_scene.log" 2>&1
+xshow "T19 --headless run of a scene that draws it" $? "$WORK/logs/t19_scene.log"
+for t in none code rid uniforms material; do
+  godot --headless --path "$FX" --script "$SPROBE" ++ --shader=res://fx/fx.gdshader --touch=$t > "$WORK/logs/t19_t_$t.log" 2>&1
+  printf '\n=== T19 --headless --script: load the shader, then touch=%s\n    exit=%s, SHADER ERROR lines: %s%s\n' $t $? \
+    "$(grep -c '^SHADER ERROR' "$WORK/logs/t19_t_$t.log")" "$(grep -q '^probe: done' "$WORK/logs/t19_t_$t.log" || echo ', no probe: done')"
+done
+if can_draw; then
+  winfx ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --scene=res://fx/fx.tscn > "$WORK/logs/t19_win.log" 2>&1
+  xshow "T19 drawing run of that scene, frame grabbed (expect a uniform white frame)" $? "$WORK/logs/t19_win.log"
+else
+  printf '\n=== T19 drawing run: SKIPPED (no display and no xvfb-run)\n'
+fi
+cp "$FIX/shader_bad_member.gdshader" "$FX/fx/fx.gdshader"
+godot --headless --path "$FX" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t19_gate2.log" 2>&1
+xshow "T19 the gate, a spatial shader with vec3.w (expect FAIL naming fx.gdshader:5)" $? "$WORK/logs/t19_gate2.log"
+cp "$FIX/shader_ok.gdshader" "$FX/fx/fx.gdshader"
+godot --headless --path "$FX" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t19_gate_ok.log" 2>&1
+xshow "T19 the gate, the same effect written with if/else (expect PASS, 1 shaders)" $? "$WORK/logs/t19_gate_ok.log"
+if can_draw; then
+  winfx ${GL[@]+"${GL[@]}"} --quit-after 600 --script "$PROBE" ++ --scene=res://fx/fx.tscn > "$WORK/logs/t19_win_ok.log" 2>&1
+  xshow "T19 drawing run with the if/else shader (expect not uniform: the scene shows through)" $? "$WORK/logs/t19_win_ok.log"
+fi
+# Correct shaders of every other type must not false-fail the gate: spatial with render modes, particles, sky, fog,
+# an include by a relative and by a res:// path, and a global uniform that project.godot does NOT declare.
+for f in shader_ok_spatial shader_ok_particles shader_ok_sky shader_ok_fog shader_inc_rel shader_inc_abs shader_global; do
+  cp "$FIX/$f.gdshader" "$FX/fx/"
+done
+cp "$FIX/shader_inc_ok.gdshaderinc" "$FX/fx/"
+godot --headless --path "$FX" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t19_gate_ctl.log" 2>&1
+xshow "T19 the gate, correct spatial/particles/sky/fog shaders, two includes, an undeclared global (expect PASS, 8 shaders)" $? \
+  "$WORK/logs/t19_gate_ctl.log"
+cp "$FIX/shader_inc_bad.gdshaderinc" "$FIX/shader_inc_user_bad.gdshader" "$FX/fx/"
+godot --headless --path "$FX" --quit-after 600 res://tools/ci/parse_gate.tscn > "$WORK/logs/t19_gate_inc.log" 2>&1
+xshow "T19 the gate, a correct shader including a broken .gdshaderinc (expect FAIL naming shader_inc_user_bad.gdshader:3)" $? \
+  "$WORK/logs/t19_gate_inc.log"
+rm -f "$FX/fx/shader_inc_bad.gdshaderinc" "$FX/fx/shader_inc_user_bad.gdshader"
+sed 's|res://fx/fx.gdshader|res://fx/shader_global.gdshader|' "$FX/fx/fx.tscn" > "$FX/fx/global.tscn"
+godot --headless --path "$FX" --quit-after 60 res://fx/global.tscn > "$WORK/logs/t19_global_h.log" 2>&1
+printf '\n=== T19 --headless run of a scene using the undeclared global uniform\n    exit=%s, ERROR lines: %s, WARNING lines: %s\n' $? \
+  "$(grep -c '^ERROR' "$WORK/logs/t19_global_h.log")" "$(grep -c '^WARNING' "$WORK/logs/t19_global_h.log")"
+if can_draw; then
+  winfx ${GL[@]+"${GL[@]}"} --quit-after 60 res://fx/global.tscn > "$WORK/logs/t19_global_w.log" 2>&1
+  printf '\n=== T19 drawing run of that scene\n    exit=%s, ERROR lines: %s, global-parameter WARNING lines: %s\n' $? \
+    "$(grep -c '^ERROR' "$WORK/logs/t19_global_w.log")" "$(grep -c '^WARNING: Shader uses global parameter' "$WORK/logs/t19_global_w.log")"
+  grep -m1 '^WARNING: Shader uses global parameter' "$WORK/logs/t19_global_w.log" | tr -d '\r' | sed 's/^/    | /'
+fi
+# Kit: the runner judges the shader error even where ERROR: lines are allowed (test_run.sh runs it that way).
+cp "$FIX/shader_return.gdshader" "$FX/fx/fx.gdshader"
+GODOT_BIN="$GODOT_BIN" bash "$ROOT/godot-kit/skills/godot-run/godot_run.sh" --path "$FX" --no-import --allow-engine-errors \
+  --banner '^never$' --frames 60 res://fx/fx.tscn > "$WORK/logs/t19_runner.out" 2>&1
+printf '\n=== KIT runner --allow-engine-errors on the scene drawing the broken shader (expect FAIL: shader error in log)\n    exit=%s\n' $?
+grep -E '^GODOT-RUN' "$WORK/logs/t19_runner.out" | sed 's/^/    | /'
+
 # ---------------------------------------------------------------------------------------------------------------------
 # GDScript warnings and review traps. W1-W5 run the engine on a demo copy with one fixture at a time; the KIT cases
 # run warnings.sh (skill godot-headless-harness).
@@ -810,6 +883,11 @@ mkdir -p "$GN/addons/thirdparty" "$GN/src/fixtures"; : > "$GN/src/fixtures/.gdig
 cp "$FIX/syntax_error.gd" "$GN/addons/thirdparty/broken.gd"; cp "$FIX/syntax_error.gd" "$GN/src/fixtures/broken.gd"
 gcase "broken scripts only in addons/ and a .gdignore dir (expect PASS)" "$GN"
 gcase "--min 99 (expect FAIL: only 5 scripts)" "$GN" --no-import --min 99
+mkdir -p "$GN/fx"; cp "$FIX/shader_return.gdshader" "$GN/fx/fx.gdshader"
+gcase "a shader that does not compile (expect FAIL naming fx/fx.gdshader:11)" "$GN"
+cp "$FIX/shader_ok.gdshader" "$GN/fx/fx.gdshader"
+gcase "the same shader written with if/else (expect PASS, 1 shaders)" "$GN" --no-import
+rm -rf "$GN/fx"
 # The add-on being written lives in addons/ too: --include checks it, the broken third-party add-on stays skipped.
 mkdir -p "$GN/addons/my_tool"; cp "$FIX/addon_plugin_ok.gd" "$GN/addons/my_tool/plugin.gd"
 gcase "--include res://addons/my_tool, correct EditorPlugin (expect PASS 6 scripts)" "$GN" --include res://addons/my_tool

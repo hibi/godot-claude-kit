@@ -8,7 +8,7 @@ description: One trustworthy verdict for a whole Godot 4 project - import, the p
 `ci.sh` runs everything the project has, and judges each run with the `godot-run` runner (banner + error tokens +
 exit code, never the exit code alone):
 
-1. The **parse gate** `res://tools/ci/parse_gate.tscn`. When the project has no gate scene, the kit's script gate
+1. The **parse gate** `res://tools/ci/parse_gate.tscn` (every script and every `.gdshader` must compile). When the project has no gate scene, the kit's script gate
    `parse_gate_script.gd` runs instead (same walk and checks, run as `--script`, no file added to the project); the
    PASS line then says `parse gate (kit script gate)`. The first engine run also does the `--import`.
 2. The **static RPC check**: every RPC the project sends must name an `@rpc` function. A call that breaks this

@@ -1,6 +1,6 @@
 ---
 name: godot-headless-harness
-description: Prove that Godot 4 game code works with a headless check that cannot lie - a parse gate (does every GDScript compile?) and diag harness scenes (does the real gameplay code do what we claim?). Use when you add or change GDScript and need to verify it, when asked to write tests, a harness, a smoke check or a CI gate for a Godot project, or before reporting that a fix works. Includes templates and a scaffold script; runs through the godot-run skill.
+description: Prove that Godot 4 game code works with a headless check that cannot lie - a parse gate (does every GDScript and every .gdshader compile?) and diag harness scenes (does the real gameplay code do what we claim?). Use when you add or change GDScript or a shader and need to verify it, when asked to write tests, a harness, a smoke check or a CI gate for a Godot project, or before reporting that a fix works. Includes templates and a scaffold script; runs through the godot-run skill.
 ---
 
 # godot-headless-harness
@@ -9,7 +9,7 @@ You get two tools, both of them plain scenes that run headless:
 
 | Tool | Question it answers | Banner |
 |---|---|---|
-| **parse gate** `res://tools/ci/parse_gate.tscn` | does every script compile, with autoloads live? | `PARSE-GATE: PASS - N scripts, 0 broken` |
+| **parse gate** `res://tools/ci/parse_gate.tscn` | does every script and every `.gdshader` compile, with autoloads live? | `PARSE-GATE: PASS - N scripts, M shaders, 0 broken` |
 | **diag harness** `res://tools/diag_<name>.tscn` | does the REAL code behave as claimed? | `DIAG-<NAME>: PASS n/n` |
 
 Run both with the runner from the `godot-run` skill. It handles isolation, `--import` and `--quit-after`, and its
@@ -80,6 +80,27 @@ These were measured on Godot 4.7.2 with the kit's `tests/measure_traps.sh` (and 
   passes.
 - **The gate scene skips its own script.** Re-loading the running gate script with `CACHE_MODE_IGNORE` crashed the
   engine (signal 11). The script gate lives outside `res://`, so the walk never reaches it.
+- **Shaders are compiled by nothing else (trap T19).** A `.gdshader` that does not compile (an early `return` in
+  `fragment()`, a typo) passes `--import` with exit 0 and no output. A drawing run of a scene with a full-screen
+  `canvas_item` effect drew a uniformly white frame. A headless run of that scene exits 0 too. Its log does have
+  `SHADER ERROR` and `ERROR: Shader compilation failed`, but no file name (`at: (null) (:11)`).
+  - Compilation is lazy, also headless. A harness that only `load()`s the shader or reads its `code` logs nothing.
+    `get_rid()`, `get_shader_uniform_list()` or setting a parameter on a `ShaderMaterial` compiles it.
+  - The gate loads every `.gdshader` and calls `get_rid()`. On Godot 4.5 and later a `Logger` catches the error, and
+    the gate FAILs with `res://...gdshader:LINE (shader does not compile: ...)`. Godot 4.4 has no `Logger`: there the
+    gate prints `shader <path>` before each one and still says PASS, and the runner fails the run on the
+    `SHADER ERROR` line. Judge the gate through the runner, never by its banner alone.
+  - Correct `canvas_item`, `spatial` (with render modes), `particles`, `sky` and `fog` shaders pass, and so do includes
+    by a relative and by a `res://` path. A broken `.gdshaderinc` FAILs the shader that includes it, at its
+    `#include` line, with the include's error message.
+  - Not walked: shaders embedded in `.tscn`/`.tres` files, VisualShader resources, and `.gdshaderinc` files on their
+    own (an include is compiled with the shader that includes it).
+  - Not caught: a `global uniform` that `project.godot` does not declare under `[shader_globals]`. It passes the gate,
+    a headless run logs nothing, and a drawing run only logs `WARNING: Shader uses global parameter '<name>', but it
+    was removed at some point.` (a WARNING, so the runner passes it).
+  - Headless, the shader is compiled by the dummy renderer (`servers/rendering/dummy/` in the error's `at:` line):
+    that checks the shader language, not the GPU driver's compiler. A drawing run (skill `godot-screenshot`) is
+    where the real renderer compiles it.
 
 ## 3. The harness contract
 

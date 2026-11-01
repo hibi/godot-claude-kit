@@ -17,6 +17,7 @@ Debian under xvfb with Mesa llvmpipe) by the kit's `tests/measure_traps.sh`:
 | a drawing run, image grabbed before the frame is drawn | **0** | at startup: a 4x4 placeholder (Windows) or null (Linux); once the scene is in: a full-size PNG, every pixel black |
 | a 3D scene without a current camera | **0** | a valid PNG, every pixel the clear color |
 | the scene's script does not parse | **0** | a plausible PNG (the HUD is there, the spawned enemies are not); only a `SCRIPT ERROR` line tells |
+| a full-screen `canvas_item` effect whose shader does not compile (an early `return` in `fragment()`) | **0** | a valid PNG, every pixel white, and `SHADER ERROR` in the log. The parse gate catches this headless too (skill `godot-headless-harness`) |
 | Linux under xvfb, default Vulkan on llvmpipe | crash | signal 11; `--rendering-driver opengl3` works |
 | Linux, no display and no `--headless` | 1 | `Unable to create DisplayServer, all display drivers failed` |
 | a drawing run on a machine with ALSA but no sound card (a CI runner) | **0** | one `ERROR: Condition "status < 0" is true. Returning: ERR_CANT_OPEN` from the audio driver: a judge that fails on ERROR lines fails a good frame. `shot.sh` passes `--audio-driver Dummy` |

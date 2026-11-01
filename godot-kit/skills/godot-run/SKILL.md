@@ -56,8 +56,8 @@ The runner handles every step for you:
 
 | Last line | Exit | Meaning |
 |---|---|---|
-| `GODOT-RUN: PASS` | 0 | banner found, engine exit 0, no `SCRIPT ERROR` / `Parse Error` / `Compile Error` / `ERROR:` / `FAIL` line |
-| `GODOT-RUN: FAIL (<reasons>)` | 1 | each reason listed: engine exit, script error, ERROR line, FAIL line, banner missing, timeout |
+| `GODOT-RUN: PASS` | 0 | banner found, engine exit 0, no `SCRIPT ERROR` / `SHADER ERROR` / `Parse Error` / `Compile Error` / `ERROR:` / `FAIL` line |
+| `GODOT-RUN: FAIL (<reasons>)` | 1 | each reason listed: engine exit, script error, shader error, ERROR line, FAIL line, banner missing, timeout |
 | `GODOT-RUN: UNVERIFIED (...)` | 2 | no `--banner` given and nothing went wrong. That also proves nothing ran |
 | `GODOT-RUN: NO-ENGINE` | 3 | no binary: ask the user, set `GODOT_BIN` |
 | `GODOT-RUN: IMPORTED` | 0 | `--import-only`: the isolated import exited 0. That says nothing about the scripts. |
@@ -95,7 +95,8 @@ Do not call an UNVERIFIED run "working".
 
   Without it, correct scripts report `Could not find type` and the run still exits 0.
 - **`--import` is not a parse check.** A syntax error passes it with exit 0 and no output. To check that every script
-  compiles, use the parse gate scene (skill `godot-headless-harness`).
+  compiles, use the parse gate scene (skill `godot-headless-harness`). It does not compile shaders either: a
+  `.gdshader` that does not compile passes `--import` silently. The parse gate compiles every `.gdshader` too.
 - **Do not use `--check-only --script` as a gate.** It does catch syntax errors. But it also reports a false
   `Identifier not found: <Autoload>` on every correct script that names an autoload, because a `--script` run never
   instantiates autoloads.
@@ -103,7 +104,7 @@ Do not call an UNVERIFIED run "working".
   - N counts **frames**, not seconds. On the measuring machine, 60 frames took ~0.85 s and 600 frames ~4.5 s.
   - A run that never loads burns the whole count before it exits.
 - **Capture the output.** Send stdout and stderr to a file (`> run.log 2>&1`), strip `\r`, and grep for tokens:
-  - errors: `SCRIPT ERROR|Parse Error|Compile Error|^ERROR:|^\s*FAIL\b`
+  - errors: `SCRIPT ERROR|SHADER ERROR|Parse Error|Compile Error|^ERROR:|^\s*FAIL\b`
   - success: your banner
 
   Judge from the matched lines, never from a feeling about the prose.
@@ -144,7 +145,7 @@ try {
     $env:APPDATA, $env:LOCALAPPDATA, $env:HOME = $saved
 }
 $log    = Get-Content "$work\run.out", "$work\run.err"
-$bad    = $log | Select-String -Pattern 'SCRIPT ERROR|Parse Error|Compile Error|^ERROR:|^\s*FAIL\b'
+$bad    = $log | Select-String -Pattern 'SCRIPT ERROR|SHADER ERROR|Parse Error|Compile Error|^ERROR:|^\s*FAIL\b'
 $banner = $log | Select-String -Pattern '^DIAG-HEALTH: PASS' -Quiet
 "exit=$code errors=$(@($bad).Count) banner=$banner verdict=$(if ($code -eq 0 -and -not $bad -and $banner) {'PASS'} else {'FAIL'})"
 $bad | ForEach-Object { "  | $($_.Line)" }

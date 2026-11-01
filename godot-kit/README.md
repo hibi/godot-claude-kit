@@ -40,6 +40,8 @@ In Godot 4 that proves nothing. Every row below exits **0**:
 |---|---|---|
 | `--import` on a project with a hard syntax error | 0 | nothing at all (4.5 and later; 4.4.1 prints the `SCRIPT ERROR`) |
 | a scene whose own script does not parse | 0 | `SCRIPT ERROR`, then the scene runs as a bare node |
+| `--import` on a project whose `.gdshader` does not compile | 0 | nothing at all. Drawn in a window, a full-screen effect with that shader came out plain white |
+| a headless run of a scene that uses that shader | 0 | `SHADER ERROR`, but no file name |
 | a test harness that forgot to `await` a slow check | 0 | `PASS`, and the failing check never prints |
 | a test harness that counts a signal with `hits += 1` in a lambda | 0 | `ok`: a lambda captures a local by value, so `hits` stays 0 although the signal fired |
 | a run with `--user-data-dir` (Godot 4 has no such flag) | 0 | empty: the scene never ran |
@@ -103,7 +105,7 @@ by [`tests/measure_traps.sh`](https://github.com/hibi/godot-claude-kit/blob/mast
 | Skill | What it gives Claude |
 |---|---|
 | **`godot-run`** | A runner (`godot_run.sh`). It finds the engine and isolates the run from your editor settings and `user://` data. It imports when needed, always has a `--quit-after` and wall-clock backstop, and judges the log: `PASS` / `FAIL (reasons)` / `UNVERIFIED` / `NO-ENGINE`. It also covers the Windows PowerShell pitfalls (a GUI build that returns instantly, UTF-16 logs). |
-| **`godot-headless-harness`** | A **parse gate** scene that checks every GDScript compiles, with autoloads live. A **diag harness** template that drives your real scenes and autoloads, with coverage counting, so an un-awaited check cannot pass silently. A scaffold script, and the rule that every new check must be seen failing before it counts. `gate.sh` runs the same gate **without adding a file to the project**, and `warnings.sh` lists the engine's **GDScript warnings** as `file:line`, which a normal headless run never prints. |
+| **`godot-headless-harness`** | A **parse gate** scene that checks every GDScript and every `.gdshader` compiles, with autoloads live. A **diag harness** template that drives your real scenes and autoloads, with coverage counting, so an un-awaited check cannot pass silently. A scaffold script, and the rule that every new check must be seen failing before it counts. `gate.sh` runs the same gate **without adding a file to the project**, and `warnings.sh` lists the engine's **GDScript warnings** as `file:line`, which a normal headless run never prints. |
 | **`godot-multiplayer-harness`** | A real headless **server and client(s) as separate engine processes**, started by `net_run.sh`, which judges every process's log and passes only when all of them pass. A harness template: one scene for both roles, a short timeout on every network wait, a "client done" handshake, loopback-only binding. A static **RPC check** that every RPC the project sends lands on an `@rpc` function. |
 | **`godot-unit-tests`** | Runs your **GUT or gdUnit4** tests through the runner with the flags that avoid their traps. It judges them by the framework's exit code, its **JUnit XML** (fresh every run, a missing one is a FAIL) and the lines where they exit 0 without testing: a dropped test file, nothing run, no test cases. A `--min-tests` floor counts tests that *passed*. Reports never land in your project. |
 | **`godot-screenshot`** | Renders a scene to a PNG in a real window, parked off-screen (on Linux: xvfb). It fails a frame that is blank, the wrong size or comes with engine errors. It compares the frame with a **golden image**, but only one rendered by the same driver and GPU. Then Claude has to **open the PNG and say what it sees**. No capture script or scene is added to your project. |
@@ -132,8 +134,10 @@ The skills are then available as `/godot-kit:godot-run`, `/godot-kit:godot-headl
 
 **Requirements:**
 
-- Godot 4.4 or later. Measured on 4.4.1, 4.5.2, 4.6.3 and 4.7.2 on Windows and Linux; on GitHub Actions on 4.7.2.
-  `warnings.sh` needs 4.5 or later. GUT and gdUnit4 must be releases that support your engine (see above).
+- Godot 4.4 or later. Measured on 4.4.1, 4.5.2, 4.6.3 and 4.7.2 on Windows and Linux (the shader cases on 4.4-4.6:
+  Windows only); on GitHub Actions on 4.7.2. The 4.8-beta2 preview (Windows and Linux) behaves like 4.7.2 in every
+  case. `warnings.sh` needs 4.5 or later. On 4.4 the parse gate cannot name a shader that does not compile (no
+  `Logger` yet): the runner still fails the run on its `SHADER ERROR` line. GUT and gdUnit4 must be releases that support your engine (see above).
 - `bash`. On Windows that is Git Bash, which Claude Code already uses.
 - The engine binary as `GODOT_BIN`, or `godot` on `PATH`. On Windows, use the `*_console.exe` build.
 

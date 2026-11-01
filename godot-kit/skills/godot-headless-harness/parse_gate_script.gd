@@ -12,12 +12,17 @@ extends SceneTree
 ## e.g. the add-on you are writing in res://addons/<name>; the other skipped directories stay skipped). Measured on Godot 4.7.2: the project's autoloads are registered by the time this runs, so a
 ## correct script naming an autoload compiles here - unlike `--check-only --script <file>`, which reports a false
 ## "Identifier not found". A syntax error and `Vector2.ZERO.z` both come back as FAIL.
+## Every .gdshader is compiled too (get_rid(); a plain load compiles nothing), as in the template: on 4.5+ a Logger
+## names the file and line, on 4.4 only the log's `SHADER ERROR` / `ERROR:` lines after `shader <path>` tell.
 
 var _skip: Array[String] = ["res://addons"]
 var _include: Array[String] = []
 var _broken: Array[String] = []
 var _bad_args: Array[String] = []
 var _count := 0
+var _shaders := 0
+var _shader_errors: Array = []  # [line, message], appended by the Logger while a shader compiles
+var _logger: Object = null
 
 
 func _walk(dir: String) -> void:
@@ -42,6 +47,8 @@ func _walk(dir: String) -> void:
 				_walk(path)
 		elif entry.ends_with(".gd"):
 			_check(path)
+		elif entry.ends_with(".gdshader"):
+			_check_shader(path)
 		entry = d.get_next()
 	d.list_dir_end()
 
@@ -64,6 +71,36 @@ func _is_abstract(s: Script) -> bool:
 	return s.has_method("is_abstract") and s.call("is_abstract")
 
 
+func _check_shader(path: String) -> void:
+	_shaders += 1
+	var sh := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as Shader
+	if sh == null:
+		_broken.append("%s (did not load)" % path)
+		return
+	if _logger == null:
+		print("  shader  %s" % path)
+	var before := _shader_errors.size()
+	var _rid := sh.get_rid()  # compiles it (lazily: a plain load compiles nothing)
+	if _shader_errors.size() > before:
+		var e: Array = _shader_errors[before]
+		_broken.append("%s:%d (shader does not compile: %s)" % [path, e[0], e[1]])
+
+
+func _start_shader_logger() -> void:
+	# Logger and OS.add_logger exist from Godot 4.5 on. Built from source at run time, so this file still compiles on 4.4.
+	if not ClassDB.class_exists("Logger"):
+		return
+	var gs := GDScript.new()
+	gs.source_code = "extends Logger\nvar sink: Array\n" \
+		+ "func _log_error(_fn, _file, line, code, _why, _notify, error_type, _bt):\n" \
+		+ "\tif error_type == ERROR_TYPE_SHADER:\n\t\tsink.append([line, code])\n"
+	if gs.reload() != OK:
+		return
+	_logger = gs.new()
+	_logger.set("sink", _shader_errors)
+	OS.call("add_logger", _logger)
+
+
 func _initialize() -> void:
 	var min_count := 1
 	var env_min := OS.get_environment("PARSE_GATE_MIN")
@@ -81,7 +118,10 @@ func _initialize() -> void:
 			_include.append(a.trim_prefix("--include=").trim_suffix("/"))
 		else:
 			_bad_args.append(a)
+	_start_shader_logger()
 	_walk("res://")
+	if _logger != null:
+		OS.call("remove_logger", _logger)
 	for b in _broken:
 		print("  FAIL  %s" % b)
 	for a in _bad_args:
@@ -89,5 +129,5 @@ func _initialize() -> void:
 	var ok := _broken.is_empty() and _bad_args.is_empty() and _count >= min_count and _count > 0
 	if _count < min_count or _count == 0:
 		print("  FAIL  only %d scripts found under res://, expected at least %d" % [_count, min_count])
-	print("PARSE-GATE: %s - %d scripts, %d broken" % ["PASS" if ok else "FAIL", _count, _broken.size()])
+	print("PARSE-GATE: %s - %d scripts, %d shaders, %d broken" % ["PASS" if ok else "FAIL", _count, _shaders, _broken.size()])
 	quit(0 if ok else 1)
