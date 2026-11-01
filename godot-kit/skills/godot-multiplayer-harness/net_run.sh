@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 # net_run.sh - run a two-process multiplayer harness headless: ONE server and N clients, each its own isolated engine
-# judged by godot_run.sh, and PASS only when EVERY process passed. An RPC error lands in one side's log only (the
+# judged by godot_run.sh, and PASS only when EVERY process passed; An RPC error lands in one side's log only (the
 # sender's for a call to a non-@rpc function, the receiver's for a node path the other side does not have), so
-# judging one log - or the exit codes, which stay 0 - misses the failure.
+# judging one log - or the exit codes, which stay 0 - misses the failure
 #
 #   bash net_run.sh --path <project> [options] res://tools/netdiag_<name>.tscn
 #
 #   --clients N      clients to start (default 1); the server gets --clients=N too
 #   --port P         UDP port (default: a random one in 20000-49999)
-#   --frames N, --timeout S   passed to every run. Defaults --timeout 120 (a hung peer must not hold CI for 10 min)
+#   --frames N, --timeout S   passed to every run; Defaults --timeout 120 (a hung peer must not hold CI for 10 min)
 #                    and --frames 100000: the harness waits are in SECONDS, and the runner's default 3600 frames (~25 s
 #                    headless) could cut a harness with several waits mid-failure - the wall timeout is the backstop
 #   --no-import      skip the one import before the processes start (only when the .godot/ cache is current)
 #   --out DIR        keep the logs here (default: a fresh temp dir; printed either way)
 #
-# Each process gets the user args `-- --role=server|client --port=P --clients=N [--client=i]`.
-# Banners: NETDIAG-<NAME>-SERVER: PASS / NETDIAG-<NAME>-CLIENT: PASS (the scene is a res:// path ending in netdiag_<name>.tscn).
+# Each process gets the user args `-- --role=server|client --port=P --clients=N [--client=i]`
+# Banners: NETDIAG-<NAME>-SERVER: PASS / NETDIAG-<NAME>-CLIENT: PASS (the scene is a res:// path ending in netdiag_<name>.tscn)
 #
 # Last line and exit code:
 #   GODOT-NET: PASS (server + N client(s))   0
@@ -46,7 +46,7 @@ esac
 [ -f "$PROJECT/${SCENE#res://}" ] || { echo "GODOT-NET: FAIL ($SCENE does not exist)"; exit 1; }
 NAME=$(printf '%s' "${base#netdiag_}" | tr 'a-z' 'A-Z')
 
-# The runner: next to this script when vendored into a project, else the sibling godot-run skill.
+# The runner: next to this script when vendored into a project, else the sibling godot-run skill
 RUNNER="$HERE/godot_run.sh"
 [ -f "$RUNNER" ] || RUNNER="$HERE/../godot-run/godot_run.sh"
 [ -f "$RUNNER" ] || { echo "GODOT-NET: FAIL (godot_run.sh not found next to net_run.sh or in ../godot-run/)"; exit 1; }
@@ -56,7 +56,7 @@ RUNNER="$HERE/godot_run.sh"
 mkdir -p "$OUT"
 show_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
-# One import up front: every process below starts with --no-import, so they never write .godot/ at the same time.
+# One import up front: every process below starts with --no-import, so they never write .godot/ at the same time
 if [ "$DO_IMPORT" = 1 ]; then
   bash "$RUNNER" --path "$PROJECT" --import-only > "$OUT/import.runner" 2>&1
   rc=$?
@@ -65,7 +65,7 @@ if [ "$DO_IMPORT" = 1 ]; then
 fi
 
 echo "net:     $SCENE, server + $CLIENTS client(s) on 127.0.0.1:$PORT, logs $(show_path "$OUT")"
-start() {  # start <tag> <role> [extra user args...]  -> background runner, output in $OUT/<tag>.runner
+start() {  # start <tag> <role> [extra user args…]  -> background runner, output in $OUT/<tag>.runner
   local tag="$1" role="$2"; shift 2
   local banner="^NETDIAG-$NAME-$(printf '%s' "$role" | tr 'a-z' 'A-Z'): PASS"
   bash "$RUNNER" --path "$PROJECT" --no-import --banner "$banner" --log "$OUT/$tag.log" "${RUNARGS[@]}" \
@@ -73,7 +73,7 @@ start() {  # start <tag> <role> [extra user args...]  -> background runner, outp
   PIDS+=($!); TAGS+=("$tag")
 }
 PIDS=() TAGS=()
-# Server first; clients right after - ENet keeps retrying a client that knocks before the server listens.
+# Server first; clients right after - ENet keeps retrying a client that knocks before the server listens
 start server server
 for i in $(seq 1 "$CLIENTS"); do start "client$i" client --client="$i"; done
 

@@ -2,18 +2,18 @@ extends SceneTree
 
 ## PARSE GATE without a file in the project: does every script under res:// compile?
 ## The same walk and checks as templates/parse_gate.gd, run as `--script` from this skill's directory - use gate.sh,
-## which picks this when the project has no gate scene of its own and passes the path the engine understands. godot-ci's
-## ci.sh does the same, and `ci.sh install` vendors a copy into res://tools/ci/ (the walk skips this file itself).
+## which picks this when the project has no gate scene of its own and passes the path the engine understands; godot-ci's
+## ci.sh does the same, and `ci.sh install` vendors a copy into res://tools/ci/ (the walk skips this file itself)
 ##
-##   bash gate.sh --path <project>          (never a bare `godot ...` run: no isolation, no backstop)
+##   bash gate.sh --path <project>          (never a bare `godot …` run: no isolation, no backstop)
 ##
 ## User args (after `++`): --min=N (fewer scripts fails; default 1, or PARSE_GATE_MIN), --skip=res://dir (repeatable,
 ## added to res://addons), --include=res://dir (repeatable: check this directory although it lies under a skipped one,
-## e.g. the add-on you are writing in res://addons/<name>; the other skipped directories stay skipped). Measured on Godot 4.7.2: the project's autoloads are registered by the time this runs, so a
+## for example the add-on you are writing in res://addons/<name>; the other skipped directories stay skipped); Measured on Godot 4.7.2: the project's autoloads are registered by the time this runs, so a
 ## correct script naming an autoload compiles here - unlike `--check-only --script <file>`, which reports a false
-## "Identifier not found". A syntax error and `Vector2.ZERO.z` both come back as FAIL.
+## "Identifier not found"; A syntax error and `Vector2.ZERO.z` both come back as FAIL
 ## Every .gdshader is compiled too (get_rid(); a plain load compiles nothing), as in the template: on 4.5+ a Logger
-## names the file and line, on 4.4 only the log's `SHADER ERROR` / `ERROR:` lines after `shader <path>` tell.
+## names the file and line, on 4.4 only the log's `SHADER ERROR` / `ERROR:` lines after `shader <path>` tell
 
 var _skip: Array[String] = ["res://addons"]
 var _include: Array[String] = []
@@ -27,7 +27,7 @@ var _logger: Object = null
 
 func _walk(dir: String) -> void:
 	if dir in _skip:
-		# A skipped directory is not walked, except for the --include directories inside that directory.
+		# A skipped directory is not walked, except for the --include directories inside that directory
 		for inc in _include:
 			if inc.begins_with(dir + "/"):
 				_walk(inc)
@@ -54,7 +54,7 @@ func _walk(dir: String) -> void:
 
 
 func _check(path: String) -> void:
-	# Fresh load (CACHE_MODE_IGNORE): a cached copy would be handed back without a re-parse. Never this script itself:
+	# Fresh load (CACHE_MODE_IGNORE): a cached copy would be handed back without a re-parse; Never this script itself:
 	# re-loading the RUNNING gate this way crashed the engine (signal 11) when a copy was vendored into res://tools/ci/.
 	if path == get_script().resource_path:
 		return
@@ -67,7 +67,7 @@ func _check(path: String) -> void:
 
 
 func _is_abstract(s: Script) -> bool:
-	# Script.is_abstract() only exists on engines with @abstract support.
+	# Script.is_abstract() only exists on engines with @abstract support
 	return s.has_method("is_abstract") and s.call("is_abstract")
 
 
@@ -87,7 +87,7 @@ func _check_shader(path: String) -> void:
 
 
 func _start_shader_logger() -> void:
-	# Logger and OS.add_logger exist from Godot 4.5 on. Built from source at run time, so this file still compiles on 4.4.
+	# Logger and OS.add_logger exist from Godot 4.5 on; Built from source at run time, so this file still compiles on 4.4
 	if not ClassDB.class_exists("Logger"):
 		return
 	var gs := GDScript.new()
@@ -108,7 +108,7 @@ func _initialize() -> void:
 		min_count = env_min.to_int()
 	elif not env_min.is_empty():
 		_bad_args.append("PARSE_GATE_MIN=%s" % env_min)
-	# An argument this gate does not know FAILS it: ignored, a typo like `--mn=40` would leave the floor at 1 and pass.
+	# An argument this gate does not know FAILS it: ignored, a typo like `--mn=40` would leave the floor at 1 and pass
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--min=") and a.trim_prefix("--min=").is_valid_int():
 			min_count = a.trim_prefix("--min=").to_int()

@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 # shot.sh - render ONE frame of a scene to a PNG in a real (off-screen) window, judge it, and optionally compare it
-# with a golden image. --headless cannot do this: it never draws a frame (frame_post_draw never fires, the viewport
-# texture is null, --write-movie crashes), and all three exit 0.
+# with a golden image; --headless cannot do this: it never draws a frame (frame_post_draw never fires, the viewport
+# texture is null, --write-movie crashes), and all three exit 0
 #
 #   bash shot.sh --path <project> --out <file.png> [options]
 #
 #   --scene res://x.tscn  scene to shoot (default: the project's main scene)
 #   --size WxH            window and image size (default 1280x720); the image is checked against it
 #   --settle N            frames to let the scene run before the capture (default 10; raise for intros/tweens)
-#   --driver D            --rendering-driver (vulkan / opengl3 / d3d12 ...). Default: the project's, except opengl3
+#   --driver D            --rendering-driver (vulkan / opengl3 / d3d12 …); Default: the project's, except opengl3
 #                         under xvfb, where Vulkan on llvmpipe crashed (signal 11) when measured
 #   --golden FILE.png     compare with this golden (needs FILE.json next to it, written by --update-golden)
-#   --max-rmse F          allowed root-mean-square difference vs the golden, 0-255 scale (default 0.5). Measured: the
+#   --max-rmse F          allowed root-mean-square difference vs the golden, 0-255 scale (default 0.5); Measured: the
 #                         same driver + GPU renders 0.000 run to run; one changed digit in a 32 px label is 1.39
 #   --update-golden       write --golden FILE.png + FILE.json from this run (only when the frame itself passed)
 #   --allow-engine-errors, --timeout S, --no-import   passed to the runner
 #
 # The capture runs as `--script` from this skill's directory: no script or scene is added to the project (the import
-# writes its usual .godot/ cache).
-# Display: Windows (macOS untested) - a normal window placed off-screen. Linux - $DISPLAY / $WAYLAND_DISPLAY if set, else xvfb-run
-# if installed, else NO-DISPLAY.
+# writes its usual .godot/ cache)
+# Display: Windows (macOS untested) - a normal window placed off-screen; Linux - $DISPLAY / $WAYLAND_DISPLAY if set, else xvfb-run
+# if installed, else NO-DISPLAY
 #
 # Last line and exit code:
 #   GODOT-SHOT: PASS <png>          0   frame drawn, right size, not blank, no engine error; golden matched if given
@@ -27,7 +27,7 @@
 #   GODOT-SHOT: UNVERIFIED (why)    2   frame fine, but the golden was rendered by another driver/GPU: not compared
 #   GODOT-SHOT: NO-ENGINE           3   set GODOT_BIN
 #   GODOT-SHOT: NO-DISPLAY          4   Linux without a display or xvfb-run: nothing can be rendered here
-# PASS proves the frame is not broken, not that it looks RIGHT: open the PNG and look at the frame yourself.
+# PASS proves the frame is not broken, not that it looks RIGHT: open the PNG and look at the frame yourself
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -61,7 +61,7 @@ RUNNER="$HERE/godot_run.sh"
 [ -f "$RUNNER" ] || RUNNER="$HERE/../godot-run/godot_run.sh"
 [ -f "$RUNNER" ] || { echo "GODOT-SHOT: FAIL (godot_run.sh not found next to shot.sh or in ../godot-run/)"; exit 1; }
 
-# The engine gets absolute, native paths (on Windows C:/...): the capture script is outside res://.
+# The engine gets absolute, native paths (on Windows C:/<dir>): the capture script is outside res://.
 abs() { local d; d=$(cd "$(dirname "$1")" 2>/dev/null && pwd) || return 1; echo "$d/$(basename "$1")"; }
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 mkdir -p "$(dirname "$OUT")"
@@ -79,8 +79,8 @@ if [ -n "$GOLDEN" ]; then
   fi
   [ -d "$gdir" ] || { echo "GODOT-SHOT: FAIL (golden directory $gdir does not exist - create goldens with --update-golden)"; exit 1; }
   GOLDEN_N=$(native "$(abs "$GOLDEN")")
-  # The frame is written to --out before the golden is read: one file for both would compare the frame with itself.
-  # (Windows paths are case-insensitive, so compare them lower-cased there.)
+  # The frame is written to --out before the golden is read: one file for both would compare the frame with itself
+  # (Windows paths are case-insensitive, so compare them lower-cased there)
   same() { if command -v cygpath >/dev/null 2>&1; then printf '%s' "$1" | tr 'A-Z' 'a-z'; else printf '%s' "$1"; fi; }
   if [ "$(same "$GOLDEN_N")" = "$(same "$OUT_N")" ]; then
     echo "GODOT-SHOT: FAIL (--out and --golden are the same file: the golden would be overwritten by the frame it is checking)"
@@ -89,7 +89,7 @@ if [ -n "$GOLDEN" ]; then
 fi
 
 # --audio-driver Dummy: a screenshot needs no sound, and a CI runner with ALSA but no sound card logs
-# `ERROR: ... ERR_CANT_OPEN` (init_output_device) on every drawing run - a good frame would FAIL on that line. Measured.
+# `ERROR: … ERR_CANT_OPEN` (init_output_device) on every drawing run - a good frame would FAIL on that line; Measured
 WRAP=() ENGINE_ARGS=(--resolution "$SIZE" --audio-driver Dummy)
 if [ "$(uname -s)" = Linux ]; then
   if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
@@ -102,7 +102,7 @@ if [ "$(uname -s)" = Linux ]; then
     fi
   fi
 else
-  # A real window, parked off-screen so it does not flash over the user's work. Measured: it still renders.
+  # A real window, parked off-screen so it does not flash over the user's work; Measured: it still renders
   ENGINE_ARGS+=(--position -10000,-10000)
 fi
 [ -n "$DRIVER" ] && ENGINE_ARGS+=(--rendering-driver "$DRIVER")

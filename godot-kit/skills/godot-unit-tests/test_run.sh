@@ -2,24 +2,24 @@
 # test_run.sh - run a Godot 4 project's GUT or gdUnit4 tests headless and judge the run by the framework's exit code,
 # its JUnit XML and the traps measured on GUT 9.7.1 / gdUnit4 6.2.2 - never by "the process exited 0":
 #   GUT exits 0 when a test file does not parse ("All tests passed!"), when a test file does not extend GutTest, when
-#   the test directory does not exist or holds no tests ("Nothing was run."), and on a fresh clone before --import.
+#   the test directory does not exist or holds no tests ("Nothing was run"), and on a fresh clone before --import
 #   gdUnit4 exits 0 when the directory does not exist or is empty ("No test cases found"), and hangs forever in its
-#   `debug>` prompt when run with -d and a test file does not parse.
+#   `debug>` prompt when run with -d and a test file does not parse
 #
 #   bash test_run.sh --path <project> [--framework gut|gdunit] [--dir res://tests] [options]
 #
 #   --framework F     gut | gdunit (default: the one installed under addons/; both installed -> pass it)
 #   --dir RES         test directory, repeatable (default for GUT: "dirs" of res://.gutconfig.json; gdUnit4 has no
-#                     project-wide default, so pass it). It must exist: a missing directory is a FAIL, not "0 tests".
+#                     project-wide default, so pass it); It must exist: a missing directory is a FAIL, not "0 tests"
 #   --min-tests N     FAIL unless at least N tests PASSED (default 1) - zero tests run is never a pass
-#   --strict          also FAIL on pending/risky tests and on gdUnit4's exit 101 (warnings, e.g. orphan nodes)
+#   --strict          also FAIL on pending/risky tests and on gdUnit4's exit 101 (warnings, for example orphan nodes)
 #   --no-import       skip the import (only when the .godot/ cache is current)
 #   --timeout S       wall-clock backstop (default 300); --frames N (default 100000: the wall clock is the backstop)
-#   --out DIR         where the log and the JUnit XML go (default: a fresh temp dir). Never inside the project:
-#                     gdUnit4 would otherwise write reports/report_N into it on every run.
+#   --out DIR         where the log and the JUnit XML go (default: a fresh temp dir); Never inside the project:
+#                     gdUnit4 would otherwise write reports/report_N into it on every run
 #
 # Last line and exit code:
-#   GODOT-TEST: PASS (<framework>: n passed, ...)   0
+#   GODOT-TEST: PASS (<framework>: n passed, …)   0
 #   GODOT-TEST: FAIL (<reasons>)                    1
 #   GODOT-TEST: NO-ENGINE                           3
 set -u
@@ -67,7 +67,7 @@ if [ ${#DIRS[@]} -eq 0 ] && [ "$FW" = gut ] && [ -f "$PROJECT/.gutconfig.json" ]
   while IFS= read -r d; do DIRS+=("$d"); done < <(tr -d '\r\n' < "$PROJECT/.gutconfig.json" \
     | sed -n 's/.*"dirs"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' | grep -o '"res://[^"]*"' | tr -d '"')
 fi
-[ ${#DIRS[@]} -gt 0 ] || fail "no test directory: pass --dir with it, e.g. --dir res://test (GUT also reads \"dirs\" from res://.gutconfig.json)"
+[ ${#DIRS[@]} -gt 0 ] || fail "no test directory: pass --dir with it, for example --dir res://test (GUT also reads \"dirs\" from res://.gutconfig.json)"
 for d in "${DIRS[@]}"; do
   case "$d" in res://*) ;; *) fail "--dir must be a res:// path, got '$d'" ;; esac
   [ -d "$PROJECT/${d#res://}" ] || fail "test directory $d does not exist (both frameworks call that 0 tests and exit 0)"
@@ -79,7 +79,7 @@ engine_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; els
 OUT_E=$(engine_path "$OUT")
 
 if [ "$DO_IMPORT" = 1 ]; then
-  # GUT and gdUnit4 are class_name-based: on a fresh clone nothing resolves until --import (GUT then exits 0).
+  # GUT and gdUnit4 are class_name-based: on a fresh clone nothing resolves until --import (GUT then exits 0)
   bash "$RUNNER" --path "$PROJECT" --import-only > "$OUT/import.runner" 2>&1
   rc=$?
   [ $rc -eq 3 ] && { cat "$OUT/import.runner"; echo "GODOT-TEST: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; }
@@ -91,20 +91,20 @@ if [ "$FW" = gut ]; then
   XML="$OUT/junit.xml"
   ARGS=(-s "res://$GUT_TOOL")
   for d in "${DIRS[@]}"; do ARGS+=("-gdir=$d"); done
-  # -gexit always: do not depend on GUT ending a headless run on its own.
+  # -gexit always: do not depend on GUT ending a headless run on its own
   ARGS+=(-gexit -gdisable_colors "-gjunit_xml_file=$OUT_E/junit.xml")
 else
-  # Never -d: with a test file that does not parse it hung at `debug>` on Windows and exited 0 on Linux.
-  # --ignoreHeadlessMode: without it gdUnit4 refuses headless (exit 103).
-  # -rd user://...: reports outside the project. gdUnit4 turns any path starting with "/" into res://, so a Linux
-  # absolute path would land INSIDE the project; user:// lands in the runner's isolated home, kept in $OUT/home.
+  # Never -d: with a test file that does not parse it hung at `debug>` on Windows and exited 0 on Linux
+  # --ignoreHeadlessMode: without it gdUnit4 refuses headless (exit 103)
+  # -rd user://<dir>: reports outside the project; gdUnit4 turns any path starting with "/" into res://, so a Linux
+  # absolute path would land INSIDE the project; user:// lands in the runner's isolated home, kept in $OUT/home
   ARGS=(-s "res://$GDU_TOOL")
   for d in "${DIRS[@]}"; do ARGS+=(-a "$d"); done
   ARGS+=(--ignoreHeadlessMode -c -rd "user://gdunit-reports" -rc 1)
 fi
 
-# The runner gives isolation, --quit-after and the wall-clock timeout. Its ERROR-line rule is switched off: a passing
-# test that EXPECTS an error (assert_push_error / assert_error(...).is_push_error) logs "ERROR: ..." too.
+# The runner gives isolation, --quit-after and the wall-clock timeout; Its ERROR-line rule is switched off: a passing
+# test that EXPECTS an error (assert_push_error / assert_error(…).is_push_error) logs "ERROR: …" too
 bash "$RUNNER" --path "$PROJECT" --no-import --allow-engine-errors --log "$OUT/test.log" --timeout "$TIMEOUT_S" \
   --frames "$FRAMES" --home "$OUT/home" "${ARGS[@]}" > "$OUT/runner.out" 2>&1
 rrc=$?
@@ -121,7 +121,7 @@ if grep -qE 'Parse Error|Compile Error' "$CLEAN"; then
   broken=$(printf '%s\n' "$all_broken" | grep . | head -3 | tr '\n' ' ')
   why+=("a script does not compile: ${broken:-see log}")
   # Measured: GUT 9.7.1 does not compile on 4.4.1-4.6.3 (on 4.5/4.6 the tests still run and raw GUT says "passed"),
-  # gdUnit4 6.2.2 not on 4.4.1 (its CLI then hangs until the timeout).
+  # gdUnit4 6.2.2 not on 4.4.1 (its CLI then hangs until the timeout)
   if [ -n "$all_broken" ] && ! printf '%s\n' "$all_broken" | grep -qvE '^res://addons/(gut|gdUnit4)/'; then
     why+=("only the framework's own scripts fail: this $FW release does not support this engine - install the one made for your Godot version")
   fi
@@ -135,7 +135,7 @@ else
   XML=$(find "$OUT/home" -path '*gdunit-reports*' -name results.xml 2>/dev/null | head -1)
   case "${code:-x}" in
     0) ;;
-    101) [ $STRICT = 1 ] && why+=("gdUnit4 exit 101: warnings (e.g. orphan nodes) under --strict") ;;
+    101) [ $STRICT = 1 ] && why+=("gdUnit4 exit 101: warnings (for example orphan nodes) under --strict") ;;
     100) why+=("gdUnit4 exit 100: failing tests") ;;
     103) why+=("gdUnit4 exit 103: headless mode refused") ;;
     105) why+=("gdUnit4 exit 105: script errors detected") ;;
@@ -147,7 +147,7 @@ fi
 total=0 passed=0 failed=0 skipped=0 risky=0
 if [ -n "${XML:-}" ] && [ -f "$XML" ]; then
   # One tag per line, then count testcases: failure/error child -> failed, skipped child -> skipped, GUT status other
-  # than "pass" (risky: no assert) -> risky, otherwise passed.
+  # than "pass" (risky: no assert) -> risky, otherwise passed
   read -r total passed failed skipped risky < <(tr '\n' ' ' < "$XML" | sed 's/</\n</g' | awk '
     function done_case() { if (!open) return; if (bad) f++; else if (skp) s++; else if (st != "" && st != "pass") r++; else p++; open = 0 }
     /^<testcase[ >]/ { done_case(); open = 1; bad = 0; skp = 0; st = ""; t++

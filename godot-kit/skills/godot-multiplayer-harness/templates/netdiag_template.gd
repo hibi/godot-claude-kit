@@ -1,13 +1,13 @@
 extends Node
 
-## NETDIAG-__NAME__: two-process headless harness - a REAL server and REAL client(s), each its own engine process.
+## NETDIAG-__NAME__: two-process headless harness - a REAL server and REAL client(s), each its own engine process
 ##
 ##   bash <godot-multiplayer-harness skill>/net_run.sh --path . res://__DIR__/netdiag___name__.tscn
 ##   (never start the roles by hand: net_run.sh imports once, isolates every process, passes the role and port, and
 ##    judges EVERY process's log - an RPC error lands in one side's log only, and every exit code stays 0)
 ##
 ## ONE scene plays both roles (`-- --role=server|client --port=N --clients=N`), so both sides have the same node
-## paths: an RPC to a path the other side does not have is dropped, and only the receiver's log says so.
+## paths: an RPC to a path the other side does not have is dropped, and only the receiver's log says so
 ##
 ## Contract (skill godot-multiplayer-harness):
 ##   - one line per check: "  ok    <name>" or "  FAIL  <name> (<why>)"
@@ -16,12 +16,12 @@ extends Node
 ##   - the server prints its banner only after every client reported done
 ##   - banners "NETDIAG-__NAME__-SERVER: PASS n/n" / "NETDIAG-__NAME__-CLIENT: PASS n/n", after EVERY check of the role
 ##
-## Fresh from the template this harness FAILS on purpose, on both sides: replace the placeholders with real checks.
+## Fresh from the template this harness FAILS on purpose, on both sides: replace the placeholders with real checks
 
-## Seconds for one network wait. ENet's own limits are far longer: a client with no server gets connection_failed
-## after ~31 s, a client whose server died hears server_disconnected after ~10 s.
+## Seconds for one network wait; ENet's own limits are far longer: a client with no server gets connection_failed
+## after ~31 s, a client whose server died hears server_disconnected after ~10 s
 const WAIT := 10.0
-## Checks per role, not counting "all checks ran". Update them whenever you add or remove a check.
+## Checks per role, not counting "all checks ran"; Update them whenever you add or remove a check
 const EXPECTED := {"server": 4, "client": 2}
 
 var role := ""
@@ -29,8 +29,8 @@ var port := 0
 var clients := 1
 var _ran := 0
 var _failed := 0
-# Members, not locals: the signal lambdas below set them. A lambda captures a LOCAL by value, so `lost = true` on a
-# local would change only the lambda's copy.
+# Members, not locals: the signal lambdas below set them; A lambda captures a LOCAL by value, so `lost = true` on a
+# local would change only the lambda's copy
 var _done := 0       # server: clients that reported done
 var _lost := false   # client: connection failed or the server went away
 
@@ -44,7 +44,7 @@ func _check(what: String, cond: bool, why := "") -> void:
 		print("  FAIL  %s (%s)" % [what, why])
 
 
-## Polls cond every frame for at most `seconds`. A plain `await <signal>` would hang until ENet's own timeout.
+## Polls cond every frame for at most `seconds`; A plain `await <signal>` would hang until ENet's own timeout
 func _wait_until(cond: Callable, seconds := WAIT) -> bool:
 	var deadline := Time.get_ticks_msec() + int(seconds * 1000)
 	while not cond.call():
@@ -55,7 +55,7 @@ func _wait_until(cond: Callable, seconds := WAIT) -> bool:
 
 
 func _ready() -> void:
-	# An argument this harness does not know FAILS it: ignored, a typo would fall back to a default without a word.
+	# An argument this harness does not know FAILS it: ignored, a typo would fall back to a default without a word
 	var unknown: Array[String] = []
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
@@ -65,7 +65,7 @@ func _ready() -> void:
 			"clients": clients = int(kv[1])
 			"client": pass  # net_run.sh numbers its clients; use it if one client must act differently
 			_: unknown.append(a)
-	# Instantiate the REAL game scene you test here, as a child, in BOTH roles (same path on both sides), e.g.:
+	# Instantiate the REAL game scene you test here, as a child, in BOTH roles (same path on both sides), for example:
 	#   _game = preload("res://src/net/match.tscn").instantiate()
 	#   add_child(_game)
 	if not unknown.is_empty():
@@ -93,7 +93,7 @@ func _server() -> void:
 	_check("%d client(s) connected" % clients, joined, "%d of %d" % [multiplayer.get_peers().size(), clients])
 	var all_done := await _wait_until(func(): return _done >= clients)
 	_check("every client reported done", all_done, "%d of %d" % [_done, clients])
-	# Assert what the server RECEIVED and applied, with the values in <why>, e.g.:
+	# Assert what the server RECEIVED and applied, with the values in <why>, for example:
 	#   _check("server applied the hit", _game.target.hp == 70, "hp=%d" % _game.target.hp)
 	_check("placeholder replaced by real server checks", false, "fresh template - write the real checks first")
 
@@ -106,18 +106,18 @@ func _client() -> void:
 	_check("connected to the server", up and not _lost, "lost=%s" % _lost)
 	if not up or _lost:
 		return
-	# Drive the game from the client and assert what came BACK, waiting with _wait_until, e.g.:
+	# Drive the game from the client and assert what came BACK, waiting with _wait_until, for example:
 	#   _game.request_hit.rpc_id(1, 30)
 	#   var got := await _wait_until(func(): return _lost or _synced.size() >= 1)
 	#   _check("server synced hp", got and _synced == [70], "synced=%s lost=%s" % [_synced, _lost])
 	_check("placeholder replaced by real client checks", false, "fresh template - write the real checks first")
 	_client_done.rpc_id(1)
-	# Stay until the server closes the session: quitting right away can drop the queued "done" packet.
+	# Stay until the server closes the session: quitting right away can drop the queued "done" packet
 	await _wait_until(func(): return _lost, 3.0)
 
 
-## Loopback only: a test never needs the LAN, and binding every interface makes Windows ask for a firewall exception.
-## If your game has its own host()/join(), call those instead - then the harness tests them too.
+## Loopback only: a test never needs the LAN, and binding every interface makes Windows ask for a firewall exception
+## If your game has its own host()/join(), call those instead - then the harness tests them too
 func _host() -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	peer.set_bind_ip("127.0.0.1")

@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
 # ci.sh - ONE verdict for a whole Godot 4 project: import, the parse gate, then every harness - diag (one process) and
 # netdiag (server + client processes) - each run judged by godot_run.sh (banner + error tokens + exit code), never by
-# the engine's exit code alone.
+# the engine's exit code alone
 #
 #   bash ci.sh --path <project> [options]            run everything, last line GODOT-CI: PASS / FAIL / NO-ENGINE
 #   bash ci.sh --path <project> install [options]    vendor ci.sh, godot_run.sh (and net_run.sh) into the project
 #                                                    and write a GitHub Actions workflow that runs them
 #
-#   --gate RES            the parse gate scene (default res://tools/ci/parse_gate.tscn). A gate always runs: without one
-#                         a CI cannot tell a syntax error from a pass (`--import` exits 0 on one). When the DEFAULT scene
+#   --gate RES            the parse gate scene (default res://tools/ci/parse_gate.tscn); A gate always runs: without one
+#                         a CI cannot tell a syntax error from a pass (`--import` exits 0 on one); When the DEFAULT scene
 #                         is missing, parse_gate_script.gd (skill godot-headless-harness; vendored by install) runs as
-#                         --script instead - same walk and checks. A --gate you name that does not exist is a FAIL.
-#   --min-harnesses N     FAIL when fewer than N harnesses (diag + netdiag) are found (default 0). Set it to the number
-#                         you have, so a moved or renamed harness directory cannot quietly shrink the run to the gate.
+#                         --script instead - same walk and checks; A --gate you name that does not exist is a FAIL
+#   --min-harnesses N     FAIL when fewer than N harnesses (diag + netdiag) are found (default 0); Set it to the number
+#                         you have, so a moved or renamed harness directory cannot quietly shrink the run to the gate
 #   --frames N, --timeout S   passed to every run (see godot_run.sh)
 #   --out DIR             keep the per-run logs here (default: a fresh temp dir; printed either way)
 #   --no-rpc-check        skip the static RPC check (for a project it misreads - it works by name; say so when reporting)
 #   --test-dir RES        GUT / gdUnit4 test directory, repeatable (GUT: default "dirs" of res://.gutconfig.json);
-#                         --test-framework gut|gdunit when both are installed; --min-tests N (default 1). Unit tests
+#                         --test-framework gut|gdunit when both are installed; --min-tests N (default 1); Unit tests
 #                         run through test_run.sh (skill godot-unit-tests) when a framework is installed under addons/;
-#                         with no known test directory the summary says SKIP, never PASS.
+#                         with no known test directory the summary says SKIP, never PASS
 #   --shot-dir RES        golden screenshots (skill godot-screenshot): every <name>.png + <name>.json there is re-shot
-#                         with shot.sh and compared. A golden from another driver/GPU is not compared (the frame is
-#                         still checked: drawn, right size, not blank, no engine error). No display (Linux without
-#                         xvfb-run): the summary says SKIP, never PASS.
+#                         with shot.sh and compared; A golden from another driver/GPU is not compared (the frame is
+#                         still checked: drawn, right size, not blank, no engine error); No display (Linux without
+#                         xvfb-run): the summary says SKIP, never PASS
 #   --require-shots       every golden must really be compared: no display, or a golden from another renderer
-#                         (e.g. after a CI image update bumped Mesa), is a FAIL instead of a SKIP / "not compared" note
+#                         (for example after a CI image update bumped Mesa), is a FAIL instead of a SKIP / "not compared" note
 #   --candidates DIR      for every golden that failed or was not compared, shoot a fresh golden (png + json) into
-#                         DIR - on a CI runner that is the golden for its renderer. After a real regression it shows
-#                         the broken frame: look at it before you copy it over the old golden.
-#   install only:  --dir D (project-relative, default tools/ci), --godot-version V (e.g. 4.7.2-stable; default:
+#                         DIR - on a CI runner that is the golden for its renderer; After a real regression it shows
+#                         the broken frame: look at it before you copy it over the old golden
+#   install only:  --dir D (project-relative, default tools/ci), --godot-version V (for example 4.7.2-stable; default:
 #                  read from the engine in GODOT_BIN / PATH), --shot-dir RES (the workflow then installs xvfb and
 #                  runs the shots with --require-shots, leaving candidates in the logs artifact)
 #
@@ -39,8 +39,8 @@
 #                         (skill godot-multiplayer-harness)
 #
 # Last line and exit code:
-#   GODOT-CI: PASS (...)     0   gate and every harness PASS
-#   GODOT-CI: FAIL (...)     1   names every run that did not pass
+#   GODOT-CI: PASS (…)     0   gate and every harness PASS
+#   GODOT-CI: FAIL (…)     1   names every run that did not pass
 #   GODOT-CI: NO-ENGINE      3   no binary: set GODOT_BIN
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -68,24 +68,24 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$PROJECT" ] && [ -f "$PROJECT/project.godot" ] || { echo "GODOT-CI: FAIL (no project.godot in --path '$PROJECT')"; exit 1; }
 
-# The runner: next to this script when vendored into a project, else the sibling godot-run skill.
+# The runner: next to this script when vendored into a project, else the sibling godot-run skill
 RUNNER="$HERE/godot_run.sh"
 [ -f "$RUNNER" ] || RUNNER="$HERE/../godot-run/godot_run.sh"
 [ -f "$RUNNER" ] || { echo "GODOT-CI: FAIL (godot_run.sh not found next to ci.sh or in ../godot-run/)"; exit 1; }
-# The multiplayer orchestrator and the static RPC check, same lookup (skill godot-multiplayer-harness). Without them
-# netdiag_*.tscn harnesses FAIL, and the RPC check is skipped (said so in the summary).
+# The multiplayer orchestrator and the static RPC check, same lookup (skill godot-multiplayer-harness); Without them
+# netdiag_*.tscn harnesses FAIL, and the RPC check is skipped (said so in the summary)
 NETRUN="$HERE/net_run.sh"
 [ -f "$NETRUN" ] || NETRUN="$HERE/../godot-multiplayer-harness/net_run.sh"
 RPCCHECK="$HERE/rpc_check.sh"
 [ -f "$RPCCHECK" ] || RPCCHECK="$HERE/../godot-multiplayer-harness/rpc_check.sh"
-# GUT / gdUnit4 runner (skill godot-unit-tests), same lookup.
+# GUT / gdUnit4 runner (skill godot-unit-tests), same lookup
 TESTRUN="$HERE/test_run.sh"
 [ -f "$TESTRUN" ] || TESTRUN="$HERE/../godot-unit-tests/test_run.sh"
-# Screenshot runner + its capture script (skill godot-screenshot), same lookup.
+# Screenshot runner + its capture script (skill godot-screenshot), same lookup
 SHOT="$HERE/shot.sh"
 [ -f "$SHOT" ] || SHOT="$HERE/../godot-screenshot/shot.sh"
-# The script gate for projects without a gate scene (skill godot-headless-harness), same lookup. It skips itself when
-# it sits inside res:// (re-loading the running gate crashed the engine).
+# The script gate for projects without a gate scene (skill godot-headless-harness), same lookup; It skips itself when
+# it sits inside res:// (re-loading the running gate crashed the engine)
 SGATE="$HERE/parse_gate_script.gd"
 [ -f "$SGATE" ] || SGATE="$HERE/../godot-headless-harness/parse_gate_script.gd"
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
@@ -100,12 +100,12 @@ if [ "${ARGS[0]:-}" = install ]; then
     BIN="${GODOT_BIN:-godot}"
     # "4.7.2.stable.official.ed1daf0bf" -> "4.7.2-stable", the release tag the workflow downloads
     GVER=$("$BIN" --version 2>/dev/null | tr -d '\r' | sed -nE 's/^([0-9]+\.[0-9]+(\.[0-9]+)?)\.([a-z0-9]+)\..*/\1-\3/p')
-    [ -n "$GVER" ] || { echo "install: cannot read the engine version - pass --godot-version (e.g. 4.7.2-stable)"; exit 1; }
+    [ -n "$GVER" ] || { echo "install: cannot read the engine version - pass --godot-version (for example 4.7.2-stable)"; exit 1; }
   fi
-  # The workflow lives at the repository root, and the project may sit in a subdirectory below that root.
+  # The workflow lives at the repository root, and the project may sit in a subdirectory below that root
   root=$(git -C "$PROJECT" rev-parse --show-toplevel 2>/dev/null) || root=""
   if [ -n "$root" ]; then
-    # Ask git for the prefix: comparing paths breaks where one directory has two spellings (Git Bash: /tmp = %TEMP%).
+    # Ask git for the prefix: comparing paths breaks where one directory has two spellings (Git Bash: /tmp = %TEMP%)
     rel=$(git -C "$PROJECT" rev-parse --show-prefix); rel="${rel%/}"; rel="${rel:-.}"
   else
     root="$PROJECT"; rel="."
@@ -125,7 +125,7 @@ if [ "${ARGS[0]:-}" = install ]; then
     vendored="$vendored, res://$DIR/shot.sh, res://$DIR/shot_capture.gd"
   fi
   if [ -f "$SGATE" ]; then cp "$SGATE" "$dest/parse_gate_script.gd"; vendored="$vendored, res://$DIR/parse_gate_script.gd"; fi
-  # Shots: keep the xvfb step (between the markers) and add the shot options; else drop that block.
+  # Shots: keep the xvfb step (between the markers) and add the shot options; else drop that block
   if [ -n "$SHOTDIR" ]; then
     shotargs=" --shot-dir res://$SHOTDIR --require-shots --candidates \"\$RUNNER_TEMP/godot-ci-logs/candidates\""
     block=(-e '/# >>> shots/d' -e '/# <<< shots/d')
@@ -137,7 +137,7 @@ if [ "${ARGS[0]:-}" = install ]; then
   sed "${block[@]}" -e "s|__GODOT_VERSION__|$GVER|g" -e "s|__PROJECT__|$rel|g" -e "s|__CI__|$rel/$DIR/ci.sh|g" \
     -e "s|__SHOTS__|$shotargs|g" "$HERE/templates/godot-ci.yml" > "$wf"
   echo "wrote $vendored and $wf (Godot $GVER, project dir '$rel'${SHOTDIR:+, shots res://$SHOTDIR})"
-  echo "next: run 'bash $rel/$DIR/ci.sh --path $rel' locally first; commit all of these files."
+  echo "next: run 'bash $rel/$DIR/ci.sh --path $rel' locally first, then commit all of these files"
   exit 0
 fi
 [ ${#ARGS[@]} -eq 0 ] || { echo "GODOT-CI: FAIL (unknown argument '${ARGS[0]}')"; exit 1; }
@@ -161,8 +161,8 @@ done < <(find "$PROJECT" \( -path "$PROJECT/.godot" -o -path "$PROJECT/addons" -
            -o -type f \( -name 'diag_*.tscn' -o -name 'netdiag_*.tscn' \) -print | sort)
 
 RESULTS=() failed=() n=0 IMPORT=()
-run() {  # run <kind> <res path> [banner [engine args...]]   gate|diag: one runner process; net: net_run.sh
-  # (server + clients). Engine args replace the scene (the script gate); <res path> is then only the label.
+run() {  # run <kind> <res path> [banner [engine args…]]   gate|diag: one runner process; net: net_run.sh
+  # (server + clients); Engine args replace the scene (the script gate); <res path> is then only the label
   local kind="$1" scene="$2" banner="${3:-}"
   shift $(($# < 3 ? $# : 3))
   local target=("$scene"); [ $# -gt 0 ] && target=(-- "$@")
@@ -177,7 +177,7 @@ run() {  # run <kind> <res path> [banner [engine args...]]   gate|diag: one runn
       ${RUNARGS[@]+"${RUNARGS[@]}"} "${target[@]}" > "$OUT/runner.out" 2>&1
   fi
   local rc=$?    # straight after the run - anything in between would overwrite it with its own status
-  # The first run imports (a fresh clone has no .godot/ cache); every later run reuses that cache.
+  # The first run imports (a fresh clone has no .godot/ cache); every later run reuses that cache
   IMPORT=(--no-import)
   sed 's/^/   /' "$OUT/runner.out"
   if [ $rc -eq 3 ]; then echo "GODOT-CI: NO-ENGINE (set GODOT_BIN to the Godot 4 executable)"; exit 3; fi
@@ -190,7 +190,7 @@ GATENOTE="parse gate"
 if [ -f "$PROJECT/${GATE#res://}" ]; then
   run gate "$GATE" '^PARSE-GATE: PASS'
 elif [ $GATE_SET = 0 ] && [ -f "$SGATE" ]; then
-  # No gate scene: the same checks as a --script run, nothing added to the project.
+  # No gate scene: the same checks as a --script run, nothing added to the project
   run gate parse_gate_script.gd '^PARSE-GATE: PASS' --script "$(native "$SGATE")"
   GATENOTE="parse gate (kit script gate)"
 elif [ $GATE_SET = 1 ]; then
@@ -200,7 +200,7 @@ else
   RESULTS+=("FAIL  gate  $GATE (missing, and parse_gate_script.gd not found next to ci.sh or in ../godot-headless-harness/)")
   failed+=("$GATE"); n=$((n + 1))
 fi
-# Static: every RPC the project sends must name an @rpc function. The gate cannot see this: such a call compiles.
+# Static: every RPC the project sends must name an @rpc function; The gate cannot see this: such a call compiles
 if [ "$RPC" = 0 ]; then
   RESULTS+=("SKIP  rpc   static check (--no-rpc-check)")
 elif [ -f "$RPCCHECK" ]; then
@@ -231,9 +231,9 @@ for h in ${HARNESSES[@]+"${HARNESSES[@]}"}; do
   esac
 done
 
-# Unit tests (GUT / gdUnit4) when a framework is installed. Without a known test directory: a visible SKIP.
+# Unit tests (GUT / gdUnit4) when a framework is installed; Without a known test directory: a visible SKIP
 UNIT="none"
-# The frameworks' command-line entry points, project-relative (the same names test_run.sh uses).
+# The frameworks' command-line entry points, project-relative (the same names test_run.sh uses)
 GUT_TOOL="addons/gut/gut_cmdln.gd" GDU_TOOL="addons/gdUnit4/bin/GdUnitCmdTool.gd"
 if [ -f "$PROJECT/$GUT_TOOL" ] || [ -f "$PROJECT/$GDU_TOOL" ]; then
   gutdirs=0
@@ -242,7 +242,7 @@ if [ -f "$PROJECT/$GUT_TOOL" ] || [ -f "$PROJECT/$GDU_TOOL" ]; then
   if [ ! -f "$TESTRUN" ]; then
     RESULTS+=("SKIP  unit  tests (test_run.sh not found next to ci.sh or in ../godot-unit-tests/)"); UNIT="SKIPPED"
   elif [ $TESTDIRS = 0 ] && [ $gutdirs = 0 ]; then
-    RESULTS+=("SKIP  unit  tests (a test framework is installed, but no test directory: pass --test-dir with it, e.g. --test-dir res://test)")
+    RESULTS+=("SKIP  unit  tests (a test framework is installed, but no test directory: pass --test-dir with it, for example --test-dir res://test)")
     UNIT="SKIPPED"
   else
     n=$((n + 1))
@@ -258,7 +258,7 @@ if [ -f "$PROJECT/$GUT_TOOL" ] || [ -f "$PROJECT/$GDU_TOOL" ]; then
   fi
 fi
 
-# Golden screenshots: re-shoot each golden image whose <name>.json (scene + size) sits in the same directory.
+# Golden screenshots: re-shoot each golden image whose <name>.json (scene + size) sits in the same directory
 SHOTS="none" ns=0 nsu=0
 if [ -z "$SHOTDIR" ] && [ $REQ_SHOTS = 1 ]; then
   RESULTS+=("FAIL  shot  --require-shots without --shot-dir"); failed+=("shots"); n=$((n + 1))

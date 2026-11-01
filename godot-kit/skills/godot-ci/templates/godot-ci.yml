@@ -1,5 +1,5 @@
-# Written by the godot-kit `godot-ci` skill. Runs the same ci.sh you run locally: import, parse gate, every
-# diag_*.tscn harness - each judged by godot_run.sh (banner + error tokens + exit code), not by the exit code alone.
+# Written by the godot-kit `godot-ci` skill; Runs the same ci.sh you run locally: import, parse gate, every
+# diag_*.tscn harness - each judged by godot_run.sh (banner + error tokens + exit code), not by the exit code alone
 name: godot-ci
 
 on:
@@ -19,15 +19,15 @@ jobs:
         run: |
           curl -sSfL -o "$RUNNER_TEMP/godot.zip" \
             "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
-          # The zip stores the binary with mode 0755, and unzip restores it: no chmod needed.
+          # The zip stores the binary with mode 0755, and unzip restores it: no chmod needed
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}_linux.x86_64" >> "$GITHUB_ENV"
 
       # >>> shots
-      # Golden screenshots need a display: a virtual one (xvfb), rendered by Mesa's llvmpipe with OpenGL. A golden made
+      # Golden screenshots need a display: a virtual one (xvfb), rendered by Mesa's llvmpipe with OpenGL; A golden made
       # on your machine comes from another renderer, so --require-shots fails the job until the goldens come from this
-      # runner: then the logs artifact holds candidates/<name>.png + .json. Look at each one; if it is right, commit it
-      # over your golden. The same happens when a runner image update changes the Mesa version.
+      # runner: then the logs artifact holds candidates/<name>.png + .json; Look at each one; if it is right, commit it
+      # over your golden; The same happens when a runner image update changes the Mesa version
       - name: Virtual display for screenshots
         run: |
           sudo apt-get update -qq

@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 # warnings.sh - the GDScript warnings of a Godot 4 project (unused variable, shadowing, integer division, unreachable
-# code, missing await ...) as "res://file.gd:LINE: message" lines.
+# code, missing await …) as "res://file.gd:LINE: message" lines
 #
-#   bash warnings.sh --path <project> [options] [file.gd ...]     files: only report these (res://, relative or absolute)
+#   bash warnings.sh --path <project> [options] [file.gd …]     files: only report these (res://, relative or absolute)
 #
-#   --gate RES      the project's parse gate scene (default res://tools/ci/parse_gate.tscn). Without one, gate.sh runs
-#                   parse_gate_script.gd from this directory instead, so a project needs nothing added to be checked.
+#   --gate RES      the project's parse gate scene (default res://tools/ci/parse_gate.tscn); Without one, gate.sh runs
+#                   parse_gate_script.gd from this directory instead, so a project needs nothing added to be checked
 #   --timeout S     wall-clock limit for each engine run (default 120)
 #   --no-import     skip the import (only when the .godot/ cache is current)
 #
 # Measured on Godot 4.7.2, which is why it works the way it does:
-#   - Without --debug the engine prints NO warnings at all: --check-only exits 0 silently, the gate says PASS.
-#   - With --debug, a script that does not parse stops at a `debug>` prompt. On Windows the engine then never exits,
-#     even with stdin closed (on Linux, stdin closed, --check-only crashed with 132 and the gate failed normally).
-#     So the gate runs normally first, and the --debug pass only after it passed, under a wall-clock timeout.
+#   - Without --debug the engine prints NO warnings at all: --check-only exits 0 silently, the gate says PASS
+#   - With --debug, a script that does not parse stops at a `debug>` prompt; On Windows the engine then never exits,
+#     even with stdin closed (on Linux, stdin closed, --check-only crashed with 132 and the gate failed normally)
+#     So the gate runs normally first, and the --debug pass only after it passed, under a wall-clock timeout
 #   - An un-awaited call to a coroutine warns only when the project enables debug/gdscript/warnings/missing_await,
-#     which is off by default. This script says so when it is off. On 4.4.1 and 4.5.2 it gives no warning even when
-#     enabled (4.6.3 and 4.7.2 do warn); the script says that on engines older than 4.6.
+#     which is off by default; This script says so when it is off; On 4.4.1 and 4.5.2 it gives no warning even when
+#     enabled (4.6.3 and 4.7.2 do warn); the script says that on engines older than 4.6
 #   - Godot 4.4.1 prints the warnings of the --debug pass as `ERROR: '<message>'` lines without file or line: this
 #     script then FAILs (never CLEAN) and says it needs 4.5+.
 #
 # Last line and exit code:
-#   GODOT-WARN: CLEAN (...)      0   the gate passed and the --debug pass printed no warning (for the files asked)
-#   GODOT-WARN: FOUND n (...)    1   n warnings, listed above as res://file.gd:LINE: message
-#   GODOT-WARN: FAIL (why)       2   could not check: the gate failed (fix that first), the --debug pass hung, ...
+#   GODOT-WARN: CLEAN (…)      0   the gate passed and the --debug pass printed no warning (for the files asked)
+#   GODOT-WARN: FOUND n (…)    1   n warnings, listed above as res://file.gd:LINE: message
+#   GODOT-WARN: FAIL (why)       2   could not check: the gate failed (fix that first), the --debug pass hung, …
 #   GODOT-WARN: NO-ENGINE        3   set GODOT_BIN
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -42,7 +42,7 @@ done
 [ -n "$PROJECT" ] && [ -f "$PROJECT/project.godot" ] || { echo "GODOT-WARN: FAIL (no project.godot in --path '$PROJECT')"; exit 2; }
 [ -f "$HERE/gate.sh" ] || { echo "GODOT-WARN: FAIL (gate.sh not found next to warnings.sh)"; exit 2; }
 
-# The files to report on, as res:// paths.
+# The files to report on, as res:// paths
 PABS=$(cd "$PROJECT" && pwd)
 WANT=()
 for f in ${FILES[@]+"${FILES[@]}"}; do
@@ -53,15 +53,15 @@ for f in ${FILES[@]+"${FILES[@]}"}; do
        else WANT+=("res://${f#./}"); fi ;;
   esac
 done
-# A file that is not in the project would match no warning and read as CLEAN - e.g. a repo-root-relative path from
-# `git diff` while the project sits in a subdirectory. Refuse it instead.
+# A file that is not in the project would match no warning and read as CLEAN - for example a repo-root-relative path from
+# `git diff` while the project sits in a subdirectory; Refuse it instead
 missing=()
 for w in ${WANT[@]+"${WANT[@]}"}; do [ -f "$PROJECT/${w#res://}" ] || missing+=("$w"); done
 if [ ${#missing[@]} -gt 0 ]; then
   echo "GODOT-WARN: FAIL (not in the project: ${missing[*]} - pass paths relative to the project, or res:// paths)"
   exit 2
 fi
-# Warnings switched off project-wide: the --debug pass would print nothing, which is not the same as clean.
+# Warnings switched off project-wide: the --debug pass would print nothing, which is not the same as clean
 we=$(tr -d '\r' < "$PROJECT/project.godot" | sed -n 's/^gdscript\/warnings\/enable=\(.*\)/\1/p' | tail -1)
 if [ "$we" = false ]; then
   echo "GODOT-WARN: FAIL (debug/gdscript/warnings/enable=false in project.godot: the engine reports no warnings at all)"
@@ -70,7 +70,7 @@ fi
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/godot_warn.XXXXXX")
 IMPORT=(); [ "$DO_IMPORT" = 1 ] || IMPORT=(--no-import)
-# 1. The ordinary gate. A script that does not parse would hang the --debug pass below.
+# 1; The ordinary gate; A script that does not parse would hang the --debug pass below
 bash "$HERE/gate.sh" --path "$PROJECT" --gate "$GATE" ${IMPORT[@]+"${IMPORT[@]}"} --timeout "$TIMEOUT_S" \
   --log "$WORK/gate.log" > "$WORK/gate.out" 2>&1
 rc=$?
@@ -81,13 +81,13 @@ if [ $rc -ne 0 ]; then
   echo "GODOT-WARN: FAIL (the parse gate did not pass - fix that first; with --debug a parse error can hang the engine)"
   exit 2
 fi
-# 2. The same gate with --debug: now every script it loads prints its warnings. stdin closed; the timeout is the guard.
+# 2; The same gate with --debug: now every script it loads prints its warnings; stdin closed; the timeout is the guard
 bash "$HERE/gate.sh" --path "$PROJECT" --gate "$GATE" --no-import --debug --timeout "$TIMEOUT_S" \
   --log "$WORK/debug.log" < /dev/null > "$WORK/debug.out" 2>&1
 rc=$?
 if [ $rc -ne 0 ]; then
   sed 's/^/  /' "$WORK/debug.out"
-  # Measured on 4.4.1: the --debug gate prints each warning as `ERROR: '<message>'`, with no file or line to map.
+  # Measured on 4.4.1: the --debug gate prints each warning as `ERROR: '<message>'`, with no file or line to map
   if tr -d '\r' < "$WORK/debug.log" | grep -q "^ERROR: '" && ! grep -q '^WARNING: ' "$WORK/debug.log"; then
     echo "GODOT-WARN: FAIL (this engine prints warnings as ERROR lines without file:line - warnings.sh needs Godot 4.5+)"
     exit 2
@@ -116,12 +116,12 @@ sed 's/^/  /' "$WORK/found.txt"
 ma=$(tr -d '\r' < "$PROJECT/project.godot" | sed -n 's/^gdscript\/warnings\/missing_await=\([0-9]\).*/\1/p' | tail -1)
 minor=$(tr -d '\r' < "$WORK/debug.log" | sed -n 's/^Godot Engine v4\.\([0-9]*\)\..*/\1/p' | head -1)
 if [ -n "$minor" ] && [ "$minor" -lt 6 ]; then
-  # Measured: 4.4.1 and 4.5.2 print no missing_await warning even with the setting on; 4.6.3 and 4.7.2 do.
+  # Measured: 4.4.1 and 4.5.2 print no missing_await warning even with the setting on; 4.6.3 and 4.7.2 do
   echo "  note: Godot 4.$minor gives NO warning for an un-awaited call to a coroutine, even with"
-  echo "        debug/gdscript/warnings/missing_await enabled. Check such calls by hand."
+  echo "        debug/gdscript/warnings/missing_await enabled; check such calls by hand"
 elif [ "${ma:-0}" = 0 ]; then
   echo "  note: debug/gdscript/warnings/missing_await is off (the default): an un-awaited call to a coroutine gives NO"
-  echo "        warning here. Check such calls by hand, or enable it (Project Settings > Debug > GDScript)."
+  echo "        warning here; check such calls by hand, or enable it (Project Settings > Debug > GDScript)"
 fi
 if [ "$n" -gt 0 ]; then echo "GODOT-WARN: FOUND $n ($scope)"; exit 1; fi
 echo "GODOT-WARN: CLEAN ($scope)"

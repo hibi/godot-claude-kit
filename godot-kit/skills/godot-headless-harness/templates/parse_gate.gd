@@ -3,28 +3,28 @@ extends Node
 ## PARSE GATE: does every script under ROOTS compile?
 ##
 ##   bash <godot-run skill>/godot_run.sh --path . --banner '^PARSE-GATE: PASS' res://tools/ci/parse_gate.tscn
-##   (never a bare `godot ...` run: no isolation, no --quit-after, and its exit code proves nothing)
+##   (never a bare `godot …` run: no isolation, no --quit-after, and its exit code proves nothing)
 ##
 ## Why a scene and not a flag: `--import` (and `--export-release`) do not parse-check scripts - a hard syntax error
-## passes both with exit 0. `--check-only --script <file>` does report it, but also reports a false
-## "Identifier not found: <Autoload>" on every script that names an autoload. Scripts loaded by a running project
+## passes both with exit 0; `--check-only --script <file>` does report it, but also reports a false
+## "Identifier not found: <Autoload>" on every script that names an autoload; Scripts loaded by a running project
 ## (this scene, or the skill's parse_gate_script.gd run by gate.sh) do see the autoloads - measured - so they
-## load honestly.
+## load honestly
 ##
 ## Each script is loaded fresh (CACHE_MODE_IGNORE, or a cached copy would be handed back without a re-parse) and must
-## come back as a script that can instantiate, or one declared @abstract. A floor on the count keeps a walk that found
-## nothing from reading as a pass. The runner should still grep the log for `SCRIPT ERROR` / `Parse Error`.
+## come back as a script that can instantiate, or one declared @abstract; A floor on the count keeps a walk that found
+## nothing from reading as a pass; The runner should still grep the log for `SCRIPT ERROR` / `Parse Error`
 ##
 ## Every .gdshader is compiled too: `--import` and the script checks never compile a shader, and a shader that does not
-## compile draws a blank (measured: white) layer in the game. Loading alone compiles nothing; get_rid() does, also
-## headless. On Godot 4.5+ a Logger names the file and line; on 4.4 (no Logger) only the log's `SHADER ERROR` /
-## `ERROR:` lines tell, right after the `shader <path>` line - the runner fails on them.
+## compile draws a blank (measured: white) layer in the game; Loading alone compiles nothing; get_rid() does, also
+## headless; On Godot 4.5+ a Logger names the file and line; on 4.4 (no Logger) only the log's `SHADER ERROR` /
+## `ERROR:` lines tell, right after the `shader <path>` line - the runner fails on them
 
-## Directories to scan. Hidden directories and directories holding a `.gdignore` are always skipped.
+## Directories to scan; Hidden directories and directories holding a `.gdignore` are always skipped
 const ROOTS := ["res://"]
-## Directories under ROOTS to leave out: third-party addons, fixtures that are broken ON PURPOSE.
+## Directories under ROOTS to leave out: third-party addons, fixtures that are broken ON PURPOSE
 const SKIP := ["res://addons"]
-## Fewer scripts than this fails the gate. Set it a little under today's count; override with PARSE_GATE_MIN.
+## Fewer scripts than this fails the gate; Set it a little under today's count; override with PARSE_GATE_MIN
 const MIN_SCRIPTS := 1
 
 var _broken: Array[String] = []
@@ -57,7 +57,7 @@ func _walk(dir: String) -> void:
 
 
 func _check(path: String) -> void:
-	# Re-loading the gate's own running script with CACHE_MODE_IGNORE crashes the engine (signal 11, measured on 4.7.2).
+	# Re-loading the gate's own running script with CACHE_MODE_IGNORE crashes the engine (signal 11, measured on 4.7.2)
 	if path == get_script().resource_path:
 		return
 	_count += 1
@@ -69,7 +69,7 @@ func _check(path: String) -> void:
 
 
 func _is_abstract(s: Script) -> bool:
-	# Script.is_abstract() only exists on engines with @abstract support.
+	# Script.is_abstract() only exists on engines with @abstract support
 	return s.has_method("is_abstract") and s.call("is_abstract")
 
 
@@ -89,7 +89,7 @@ func _check_shader(path: String) -> void:
 
 
 func _start_shader_logger() -> void:
-	# Logger and OS.add_logger exist from Godot 4.5 on. Built from source at run time, so this file still compiles on 4.4.
+	# Logger and OS.add_logger exist from Godot 4.5 on; Built from source at run time, so this file still compiles on 4.4
 	if not ClassDB.class_exists("Logger"):
 		return
 	var gs := GDScript.new()
@@ -109,7 +109,7 @@ func _ready() -> void:
 	if env_min.is_valid_int():
 		min_count = env_min.to_int()
 	elif not env_min.is_empty():
-		# Not a number: to_int() would make it 0 and drop the floor without a word.
+		# Not a number: to_int() would make it 0 and drop the floor without a word
 		_broken.append("PARSE_GATE_MIN=%s (not a whole number)" % env_min)
 	_start_shader_logger()
 	for r in ROOTS:

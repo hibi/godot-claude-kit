@@ -1,12 +1,12 @@
 extends SceneTree
 
-## Screenshot capture for shot.sh. Runs as `--script` from OUTSIDE the project: no file of it lands in res://.
-## Autoloads are present (measured), so a scene that uses them runs as in the game.
+## Screenshot capture for shot.sh; Runs as `--script` from OUTSIDE the project: no file of it lands in res://.
+## Autoloads are present (measured), so a scene that uses them runs as in the game
 ##
 ## User args (after `++`): --scene=res://x.tscn --out=<abs.png> --size=WxH [--settle=N]
 ##                         [--golden=<abs.png> [--max-rmse=F] | --update-golden]
-## Prints FAIL lines for everything that is wrong and `SHOT: PASS` only when every check passed. The runner judges
-## the log; the exit code alone means nothing (a headless run of this exits 0 without ever drawing a pixel).
+## Prints FAIL lines for everything that is wrong and `SHOT: PASS` only when every check passed; The runner judges
+## the log; the exit code alone means nothing (a headless run of this exits 0 without ever drawing a pixel)
 
 var _failed := false
 
@@ -16,7 +16,7 @@ func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
-	# An unknown or malformed argument FAILS the shot: ignored, a typo like `--max_rmse=0.1` would leave the limit at 0.5.
+	# An unknown or malformed argument FAILS the shot: ignored, a typo like `--max_rmse=0.1` would leave the limit at 0.5
 	for k in args:
 		if not k in ["scene", "out", "size", "settle", "golden", "max-rmse", "update-golden"]:
 			_finish("FAIL unknown argument --%s (see the header of shot_capture.gd)" % k)
@@ -33,8 +33,8 @@ func _initialize() -> void:
 	var max_rmse := float(args.get("max-rmse", "0.5"))
 
 	if DisplayServer.get_name() == "headless":
-		# --headless renders nothing: frame_post_draw never fires and the viewport texture is null. Say so now
-		# instead of waiting for --quit-after.
+		# --headless renders nothing: frame_post_draw never fires and the viewport texture is null; Say so now
+		# instead of waiting for --quit-after
 		_finish("FAIL needs a display: this run is --headless, which never draws a frame")
 		return
 	if scene_path.is_empty() or out.is_empty() or not "x" in size_s:
@@ -49,11 +49,11 @@ func _initialize() -> void:
 
 	for i in settle:
 		await process_frame
-	# The frame must be DRAWN before it is read: grabbed earlier (e.g. in _ready) the viewport is uniform black.
+	# The frame must be DRAWN before it is read: grabbed earlier (for example in _ready) the viewport is uniform black
 	await RenderingServer.frame_post_draw
 
-	# Who rendered the frame. A golden is compared only when ALL of this matches: the same driver on the same GPU
-	# renders byte-identical frames, Vulkan vs OpenGL (or another GPU / driver version) does not.
+	# Who rendered the frame; A golden is compared only when ALL of this matches: the same driver on the same GPU
+	# renders byte-identical frames, Vulkan vs OpenGL (or another GPU / driver version) does not
 	var who := {"driver": RenderingServer.get_current_rendering_driver_name(),
 			"adapter": RenderingServer.get_video_adapter_name(),
 			"api": RenderingServer.get_video_adapter_api_version(),
@@ -77,7 +77,7 @@ func _initialize() -> void:
 	var flat := Image.create(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8)
 	flat.fill(c0)
 	if float(img.compute_image_metrics(flat, false)["max"]) == 0.0:
-		# A 3D scene without a current camera, or a capture before the first draw: a valid PNG of one color.
+		# A 3D scene without a current camera, or a capture before the first draw: a valid PNG of one color
 		_fail("FAIL blank frame: every pixel is %s (no camera? nothing visible? captured too early?)" % c0)
 
 	if args.has("update-golden") and not golden.is_empty() and not _failed:

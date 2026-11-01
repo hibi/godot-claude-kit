@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scaffold.sh - put the parse gate or a new harness into a Godot 4 project, from this skill's templates.
+# scaffold.sh - put the parse gate or a new harness into a Godot 4 project, from this skill's templates
 #
 #   bash scaffold.sh --path <project> gate              -> res://tools/ci/parse_gate.gd + .tscn
 #   bash scaffold.sh --path <project> harness <name>    -> res://tools/diag_<name>.gd + .tscn, banner DIAG-<NAME>
 #
 #   --dir D   project-relative directory to write into (default tools/ci for the gate, tools for a harness)
 #
-# Writes the .tscn itself, so its script path always matches where the .gd landed. Never overwrites a file.
+# Writes the .tscn itself, so its script path always matches where the .gd landed; Never overwrites a file
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -41,7 +41,7 @@ case "$KIND" in
     write_scene "res://$DIR/parse_gate.gd" "ParseGate" "$tscn"
     echo "wrote res://$DIR/parse_gate.gd and res://$DIR/parse_gate.tscn"
     echo "next: run it, then set MIN_SCRIPTS a little under the count the banner prints; add broken-on-purpose"
-    echo "      fixture directories and third-party code to SKIP."
+    echo "      fixture directories and third-party code to SKIP"
     ;;
   harness)
     name="${2:-}"
@@ -55,7 +55,7 @@ case "$KIND" in
     node=$(printf '%s' "$name" | awk -F_ '{ for (i = 1; i <= NF; i++) printf "%s%s", toupper(substr($i, 1, 1)), substr($i, 2) }')
     write_scene "res://$DIR/diag_$name.gd" "Diag$node" "$tscn"
     echo "wrote res://$DIR/diag_$name.gd and res://$DIR/diag_$name.tscn (banner DIAG-$NAME)"
-    echo "next: it FAILS until the placeholder is replaced by real checks and EXPECTED matches their number."
+    echo "next: it FAILS until the placeholder is replaced by real checks and EXPECTED matches their number"
     ;;
   *)
     echo "usage: bash scaffold.sh --path <project> gate | harness <name>  [--dir <project-relative dir>]"; exit 1 ;;
